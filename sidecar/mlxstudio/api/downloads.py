@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
-from ..db.models import Activity, Download, Model
+from ..db.models import Activity, Model
 from ..db.session import get_db
 from ..schemas import DownloadRequest
 from ..security import require_internal_token
@@ -24,8 +24,6 @@ router = APIRouter(
 @router.post("")
 def create_download(req: DownloadRequest, db: Session = Depends(get_db)):
     job_id = str(uuid.uuid4())
-    row = Download(id=job_id, hf_repo_id=req.repo_id, status="downloading")
-    db.add(row)
     db.add(Activity(kind="download", message=f"Started download: {req.repo_id}"))
     db.commit()
     manager.start(job_id, req.repo_id)

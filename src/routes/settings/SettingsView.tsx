@@ -1,11 +1,21 @@
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button, Card } from "@/components/ui/primitives";
 import { useUI, type Theme } from "@/stores/ui";
 import { api, getConfig } from "@/lib/api/client";
 
+interface AppSettings {
+  hf_token_set: boolean;
+  models_dir: string;
+}
+
 export function SettingsView() {
   const { theme, setTheme } = useUI();
   const cfg = getConfig();
+  const { data: settings } = useQuery({
+    queryKey: ["settings"],
+    queryFn: () => api<AppSettings>("/settings"),
+  });
 
   return (
     <div className="animate-fade-in space-y-6 pt-2">
@@ -53,10 +63,7 @@ export function SettingsView() {
       </Section>
 
       <Section title="Models directory" desc="Where weights are stored.">
-        <Field label="Path" value="~/.mlxstudio/models" mono />
-        <button className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted">
-          Change…
-        </button>
+        <CopyableField label="Path" value={settings?.models_dir ?? "…"} />
       </Section>
 
       <Section title="Performance" desc="Defaults applied when loading a model.">

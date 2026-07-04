@@ -88,6 +88,31 @@ def is_chat_model(repo_id: str) -> bool:
     return _NON_LLM_RE.search(repo_id) is None
 
 
+def repo_detail(repo_id: str) -> dict:
+    """License, popularity, and README for one repo, straight from the Hub."""
+    if _api is None:
+        raise RuntimeError("Hugging Face Hub is unreachable")
+    from .settings_store import get_hf_token
+
+    token = get_hf_token()
+    info = _api.model_info(repo_id, token=token)
+    card_data = getattr(info, "card_data", None)
+    readme: str | None = None
+    try:
+        from huggingface_hub import ModelCard
+
+        readme = ModelCard.load(repo_id, token=token).text
+    except Exception:
+        logger.warning("Could not load model card for %s", repo_id)
+    return {
+        "hf_repo_id": repo_id,
+        "license": getattr(card_data, "license", None) if card_data else None,
+        "downloads": getattr(info, "downloads", 0),
+        "likes": getattr(info, "likes", 0),
+        "readme": readme,
+    }
+
+
 def search(query: CatalogQuery) -> list[dict]:
     results: list[dict]
     if _api is not None:

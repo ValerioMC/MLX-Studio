@@ -1,5 +1,4 @@
 import { cn } from "@/lib/utils";
-import { useUI } from "@/stores/ui";
 import {
   Boxes,
   LayoutDashboard,
@@ -23,8 +22,6 @@ const nav = [
 ];
 
 export function Sidebar() {
-  const open = useUI((s) => s.sidebarOpen);
-
   const { data: models } = useQuery({
     queryKey: ["models"],
     queryFn: () => api<Model[]>("/models"),
@@ -39,8 +36,6 @@ export function Sidebar() {
   const running = models?.filter((m) => m.status === "running") ?? [];
   const activeDownloads =
     downloads?.items.filter((d) => d.status === "downloading").length ?? 0;
-
-  if (!open) return null;
 
   return (
     <aside className="flex h-full w-56 shrink-0 flex-col border-r border-border bg-sidebar">

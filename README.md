@@ -66,7 +66,10 @@ pnpm tauri:build            # produces MLX Studio.app + .dmg
 
 ## Using the OpenAI-compatible API
 
-Once a model is running, point any OpenAI client at the local server:
+Point any OpenAI client at the local server. Every installed model is served:
+if it is not running yet, it loads automatically on the first request.
+`GET /v1/models` lists all installed models. In the app, the **Models** tab has
+a Connect button per model with ready-to-copy snippets (OpenAI SDK, LangChain, curl).
 
 ```python
 from openai import OpenAI
@@ -85,13 +88,32 @@ Find the API key under **Settings ▸ API**.
 
 ## Features
 
-- **Dashboard** — installed/running models, live memory gauge, recent activity
-- **Catalog** — search `mlx-community` models, filter by params/quant/vision/instruct, memory-fit badge (Fits / Tight / Too big / Unknown)
-- **Downloads** — resumable downloads with live speed + progress (SSE)
-- **Models** — start, stop, delete, update, view logs; memory-fit guard before load
-- **Chat** — streaming responses, Markdown + code highlighting, multiple conversations
-- **Settings** — models directory, API port/key, theme, performance defaults, optional Hugging Face token (raises download rate limits)
-- **OpenAI-compatible `/v1` API** — for `curl`, the OpenAI SDK, Continue, Cursor, etc.
+- **Dashboard**: installed/running models, live memory gauge, recent activity
+- **Catalog**: search `mlx-community` models, filter by params/quant/vision/instruct, memory-fit badge (Fits / Tight / Too big / Unknown), model card dialog (README, license, downloads)
+- **Downloads**: resumable downloads with live speed + progress (SSE); pause/cancel take effect at the next file boundary
+- **Models**: start, stop, delete, update; memory estimate before load; per-model Connect dialog with code snippets (OpenAI SDK, LangChain, curl); non-chat repos (ASR, embeddings) are flagged and not startable
+- **Chat**: streaming responses, Markdown + code highlighting, persisted conversation history, tokens/sec per reply
+- **Settings**: models directory, API base URL/key, theme, optional Hugging Face token (raises download rate limits)
+- **OpenAI-compatible `/v1` API**: for `curl`, the OpenAI SDK, LangChain, Continue, Cursor, etc.
+
+## Process lifecycle
+
+The sidecar can never outlive the app:
+
+1. On quit, the Rust core kills the sidecar child and sweeps any process still
+   listening on its port (a PyInstaller onefile kill only reaches the bootloader).
+2. On launch, it kills stale `mlxstudio-server` processes holding the port from a
+   previous crash, and falls back to a free port if a foreign app occupies it.
+3. The sidecar watches the app's PID (`MLXSTUDIO_PARENT_PID`) and exits on its own
+   if the app dies without cleanup (force-quit, crash).
+
+## Run tests
+
+```bash
+cd sidecar
+uv run --extra dev pytest tests      # sidecar unit + API tests
+pnpm exec tsc --noEmit               # frontend typecheck
+```
 
 ## License
 

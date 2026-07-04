@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from ..schemas import CatalogQuery
 from ..security import require_internal_token
@@ -52,3 +52,11 @@ def search(
             }
         )
     return {"items": out, "budget_bytes": budget, "total_usable_bytes": total_usable}
+
+
+@router.get("/detail")
+def detail(repo_id: str):
+    try:
+        return hf_catalog.repo_detail(repo_id)
+    except Exception as exc:
+        raise HTTPException(502, f"Could not fetch model details: {exc}") from exc

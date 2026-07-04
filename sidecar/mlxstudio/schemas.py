@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ModelOut(BaseModel):
@@ -21,10 +19,10 @@ class ModelOut(BaseModel):
     license: str | None = None
     description: str | None = None
     status: str = "available"
-    fits_machine: bool | None = None
+    # False for repos the chat engine can't serve (ASR, embeddings, ...).
+    chat_capable: bool = True
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CatalogQuery(BaseModel):
@@ -41,7 +39,6 @@ class CatalogQuery(BaseModel):
 
 class StartModelRequest(BaseModel):
     context_length: int | None = None
-    kv_cache: bool = True
     # Qwen3 and similar reasoning models emit a long <think> block by default.
     # Set False to skip it and get direct answers.
     enable_thinking: bool = True
@@ -49,52 +46,6 @@ class StartModelRequest(BaseModel):
 
 class DownloadRequest(BaseModel):
     repo_id: str
-
-
-class DownloadOut(BaseModel):
-    id: str
-    hf_repo_id: str
-    status: str
-    total_bytes: int | None = None
-    downloaded_bytes: int = 0
-    speed_bps: int | None = None
-    error: str | None = None
-
-    class Config:
-        from_attributes = True
-
-
-class SystemStats(BaseModel):
-    ram_total: int
-    ram_used: int
-    ram_available: int
-    swap_used: int
-    cpu_percent: float
-    disk_free: int
-    loaded_models: list[dict]
-
-
-class ConversationIn(BaseModel):
-    title: str | None = None
-    model_id: str | None = None
-    system_prompt: str | None = None
-
-
-class ConversationPatch(BaseModel):
-    title: str | None = None
-    pinned: bool | None = None
-    system_prompt: str | None = None
-
-
-class ConversationOut(BaseModel):
-    id: str
-    title: str | None
-    model_id: str | None
-    pinned: bool
-    updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 # --- OpenAI-compatible ---

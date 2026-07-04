@@ -46,11 +46,22 @@ pub fn run() {
         .expect("error while building MLX Studio")
         .run(|app_handle, event| {
             // Make sure the sidecar dies with the app so it never orphans and
-            // holds the fixed port hostage on the next launch.
-            if let RunEvent::Exit = event {
-                if let Some(child) = app_handle.state::<AppState>().sidecar.lock().unwrap().take() {
-                    let _ = child.kill();
-                }
+            // holds the fixed port hostage on the next launch. ExitRequested
+            // fires when the last window closes, Exit on final teardown; the
+            // cleanup is idempotent, so run it on both.
+            if matches!(event, RunEvent::ExitRequested { .. } | RunEvent::Exit) {
+                shutdown_sidecar(app_handle);
             }
         });
+}
+
+/// Kill the sidecar child and sweep any process still listening on its port
+/// (with a PyInstaller onefile binary the child is only the bootloader).
+fn shutdown_sidecar(app_handle: &tauri::AppHandle) {
+    let state = app_handle.state::<AppState>();
+    if let Some(child) = state.sidecar.lock().unwrap().take() {
+        let _ = child.kill();
+    }
+    let port = state.config.lock().unwrap().port;
+    sidecar::kill_stale_sidecar(port);
 }

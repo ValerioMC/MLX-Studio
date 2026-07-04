@@ -14,7 +14,7 @@ export function streamChat(
   messages: ChatMsg[],
   opts: { temperature?: number; maxTokens?: number } = {},
   onToken: (t: string) => void,
-  onDone: (meta: { tokPerSec?: number }) => void,
+  onDone: (meta: { tokPerSec?: number; error?: string }) => void,
 ): () => void {
   const ctrl = new AbortController();
   (async () => {
@@ -30,6 +30,12 @@ export function streamChat(
         max_tokens: opts.maxTokens ?? 1024,
       }),
     });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(
+        body?.detail?.message || body?.error?.message || body?.detail || res.statusText,
+      );
+    }
     if (!res.body) return;
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
@@ -56,6 +62,9 @@ export function streamChat(
       }
     }
     onDone(meta);
-  })().catch(() => onDone({}));
+  })().catch((e) =>
+    // A user-initiated stop is not an error.
+    onDone(ctrl.signal.aborted ? {} : { error: (e as Error).message || "Request failed" }),
+  );
   return () => ctrl.abort();
 }

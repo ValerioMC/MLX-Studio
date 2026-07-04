@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import os
+import threading
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import __version__
-from .api import catalog, chat, downloads
+from .api import catalog, conversations, downloads
 from .api import models as models_api
 from .api import openai, settings as settings_api, system
 from .config import get_settings
@@ -19,13 +23,38 @@ from .services.download_manager import manager
 settings = get_settings()
 _started_at = 0.0
 
+logger = logging.getLogger(__name__)
+
+
+def _start_parent_watchdog() -> None:
+    """Exit when the Tauri process that spawned us dies.
+
+    The Rust core kills the sidecar on clean exit, but a crash or force-quit
+    skips that path, and with a PyInstaller onefile binary killing the
+    bootloader does not reach this inner process. Watching the parent PID from
+    inside guarantees the sidecar never outlives the app."""
+    parent_pid_env = os.environ.get("MLXSTUDIO_PARENT_PID")
+    if not parent_pid_env:
+        return  # standalone dev run: no parent to watch
+    parent_pid = int(parent_pid_env)
+
+    def _watch() -> None:
+        import psutil
+
+        while psutil.pid_exists(parent_pid):
+            time.sleep(2.0)
+        logger.info("Parent process %s exited; shutting down sidecar", parent_pid)
+        os._exit(0)
+
+    threading.Thread(target=_watch, daemon=True, name="parent-watchdog").start()
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     global _started_at
-    import time
 
     _started_at = time.time()
+    _start_parent_watchdog()
     init_db()
     manager.bind_loop(asyncio.get_running_loop())
     from .api.downloads import promote_completed_download, reconcile_models
@@ -52,8 +81,6 @@ def create_app() -> FastAPI:
 
     @app.get("/health")
     def health():
-        import time
-
         from .services.engine import MLX_AVAILABLE
 
         return {
@@ -64,10 +91,10 @@ def create_app() -> FastAPI:
         }
 
     app.include_router(catalog.router)
+    app.include_router(conversations.router)
     app.include_router(downloads.router)
     app.include_router(models_api.router)
     app.include_router(system.router)
-    app.include_router(chat.router)
     app.include_router(openai.router)
     app.include_router(settings_api.router)
     return app

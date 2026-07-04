@@ -1,19 +1,31 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
 import { Badge, Button, Card } from "@/components/ui/primitives";
+import { ModelDetailDialog } from "./ModelDetailDialog";
 import { bytes, params } from "@/lib/format";
 import type { Model } from "@/types";
 import { Link } from "react-router-dom";
 import { Search, Download, Check, Eye, MessageSquare } from "lucide-react";
 
-interface CatalogResult extends Model {}
-
 export function CatalogView() {
   const [q, setQ] = useState("");
   const [quant, setQuant] = useState<string | null>(null);
   const [vision, setVision] = useState<boolean | null>(null);
+  const [detailTarget, setDetailTarget] = useState<Model | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const qc = useQueryClient();
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const { data, isFetching } = useQuery({
     queryKey: ["catalog", q, quant, vision],
@@ -22,7 +34,7 @@ export function CatalogView() {
       if (q) p.set("q", q);
       if (quant) p.set("quant", quant);
       if (vision !== null) p.set("vision", String(vision));
-      return api<{ items: CatalogResult[] }>(`/catalog/search?${p}`);
+      return api<{ items: Model[] }>(`/catalog/search?${p}`);
     },
   });
 
@@ -44,6 +56,7 @@ export function CatalogView() {
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input
+          ref={searchRef}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search models…  (⌘F)"
@@ -66,7 +79,13 @@ export function CatalogView() {
               <Card key={m.hf_repo_id} className="flex flex-col">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <h3 className="font-medium leading-tight">{m.display_name}</h3>
+                    <h3
+                      className="cursor-pointer font-medium leading-tight hover:text-accent hover:underline"
+                      title="View model card"
+                      onClick={() => setDetailTarget(m)}
+                    >
+                      {m.display_name}
+                    </h3>
                     <p className="mt-0.5 text-xs text-muted-foreground">{m.hf_repo_id}</p>
                   </div>
                   <FitBadge fit={m.fit} />
@@ -128,6 +147,14 @@ export function CatalogView() {
               </Card>
             ))}
       </div>
+
+      {detailTarget && (
+        <ModelDetailDialog
+          model={detailTarget}
+          onClose={() => setDetailTarget(null)}
+          onDownload={(repo) => download.mutate(repo)}
+        />
+      )}
     </div>
   );
 }

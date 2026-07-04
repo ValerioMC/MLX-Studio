@@ -1,4 +1,4 @@
-"""ORM models — mirrors the schema in docs/ARCHITECTURE.md."""
+"""ORM models. Mirrors the schema in ARCHITECTURE.md."""
 
 from __future__ import annotations
 
@@ -43,29 +43,11 @@ class Model(Base):
     description: Mapped[str | None] = mapped_column(Text)
     local_path: Mapped[str | None] = mapped_column(String)
     status: Mapped[str] = mapped_column(String, default="available")
-    installed_at: Mapped[datetime | None] = mapped_column(DateTime)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime)
-    metadata_json: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )
-
-
-class Download(Base):
-    __tablename__ = "downloads"
-
-    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
-    model_id: Mapped[str | None] = mapped_column(ForeignKey("models.id", ondelete="CASCADE"))
-    hf_repo_id: Mapped[str] = mapped_column(String, nullable=False)
-    status: Mapped[str] = mapped_column(String, default="queued")
-    total_bytes: Mapped[int | None] = mapped_column(Integer)
-    downloaded_bytes: Mapped[int] = mapped_column(Integer, default=0)
-    speed_bps: Mapped[int | None] = mapped_column(Integer)
-    error: Mapped[str | None] = mapped_column(Text)
-    started_at: Mapped[datetime | None] = mapped_column(DateTime)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
 class Conversation(Base):
@@ -73,30 +55,28 @@ class Conversation(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
     title: Mapped[str | None] = mapped_column(String)
-    model_id: Mapped[str | None] = mapped_column(ForeignKey("models.id", ondelete="SET NULL"))
-    system_prompt: Mapped[str | None] = mapped_column(Text)
-    params_json: Mapped[str | None] = mapped_column(Text)
-    pinned: Mapped[bool] = mapped_column(Boolean, default=False)
+    model_id: Mapped[str | None] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )
 
     messages: Mapped[list["Message"]] = relationship(
-        back_populates="conversation", cascade="all, delete-orphan", order_by="Message.created_at"
+        back_populates="conversation", cascade="all, delete-orphan", order_by="Message.id"
     )
 
 
 class Message(Base):
     __tablename__ = "messages"
 
-    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    # Autoincrement id doubles as insertion order (created_at only has second
+    # precision, so a user+assistant pair saved together would tie on it).
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     conversation_id: Mapped[str] = mapped_column(
         ForeignKey("conversations.id", ondelete="CASCADE")
     )
     role: Mapped[str] = mapped_column(String, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    tokens: Mapped[int | None] = mapped_column(Integer)
     tok_per_sec: Mapped[float | None] = mapped_column(Float)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 

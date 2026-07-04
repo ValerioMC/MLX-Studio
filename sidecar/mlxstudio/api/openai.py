@@ -23,10 +23,22 @@ settings = get_settings()
 
 @router.get("/models")
 def list_models():
-    data = [
-        {"id": r["model_id"], "object": "model", "owned_by": "mlx-studio"}
-        for r in engine.loaded()
-    ]
+    """Every installed chat model is served: requests to a stopped one trigger an
+    autoload, so clients should see the full registry, not just what's loaded."""
+    from ..services import hf_catalog
+
+    db = SessionLocal()
+    try:
+        from ..db.models import Model
+
+        rows = db.query(Model).filter(Model.local_path.isnot(None)).all()
+        data = [
+            {"id": m.id, "object": "model", "owned_by": "mlx-studio"}
+            for m in rows
+            if hf_catalog.is_chat_model(m.hf_repo_id)
+        ]
+    finally:
+        db.close()
     return {"object": "list", "data": data}
 
 

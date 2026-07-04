@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from ..config import get_settings
 from ..security import require_internal_token
 from ..services import settings_store
 
@@ -18,7 +19,10 @@ class HfTokenIn(BaseModel):
 @router.get("")
 def get_settings_view() -> dict:
     # Never return the token itself; only whether one is configured.
-    return {"hf_token_set": settings_store.get_hf_token() is not None}
+    return {
+        "hf_token_set": settings_store.get_hf_token() is not None,
+        "models_dir": str(get_settings().models_path),
+    }
 
 
 @router.put("/hf-token")

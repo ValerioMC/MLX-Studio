@@ -5,8 +5,6 @@ export type Theme = "light" | "dark" | "system";
 interface UIState {
   theme: Theme;
   setTheme: (t: Theme) => void;
-  sidebarOpen: boolean;
-  toggleSidebar: () => void;
 }
 
 function applyTheme(theme: Theme) {
@@ -17,14 +15,12 @@ function applyTheme(theme: Theme) {
   root.classList.toggle("dark", dark);
 }
 
-export const useUI = create<UIState>((set, get) => ({
+export const useUI = create<UIState>((set) => ({
   theme: "system",
   setTheme: (theme) => {
     applyTheme(theme);
     set({ theme });
   },
-  sidebarOpen: true,
-  toggleSidebar: () => set({ sidebarOpen: !get().sidebarOpen }),
 }));
 
 // Initialize on load.

@@ -12,6 +12,7 @@ export interface Model {
   description?: string | null;
   status: "available" | "downloading" | "installed" | "running" | "error";
   fit?: "fits" | "tight" | "too_big" | "unknown" | null;
+  chat_capable?: boolean;
 }
 
 export interface DownloadJob {
@@ -45,6 +46,5 @@ export interface Conversation {
   id: string;
   title: string | null;
   model_id: string | null;
-  pinned: boolean;
   updated_at: string;
 }

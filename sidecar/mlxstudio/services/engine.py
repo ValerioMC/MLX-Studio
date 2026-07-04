@@ -1,15 +1,22 @@
 """Inference engine wrapping mlx-lm. Falls back to a streaming echo stub when MLX
-is unavailable (non-Apple-Silicon dev machines) so the full app remains testable."""
+is unavailable (non-Apple-Silicon dev machines) so the full app remains testable.
+
+All MLX work (weight loading and generation) runs on one dedicated thread: MLX
+GPU streams are thread-local, and FastAPI advances sync response generators from
+varying threadpool threads, which intermittently fails with "There is no
+Stream(gpu, N) in current thread". Tokens cross over via a queue."""
 
 from __future__ import annotations
 
+import queue
 import threading
 import time
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 try:  # MLX is only present on Apple Silicon
-    from mlx_lm import generate, load, stream_generate  # type: ignore
+    from mlx_lm import load, stream_generate  # type: ignore
     from mlx_lm.sample_utils import make_sampler  # type: ignore
 
     MLX_AVAILABLE = True
@@ -28,12 +35,19 @@ class Runner:
     loaded_at: float = field(default_factory=time.time)
 
 
+# Queue sentinel marking the end of a generation.
+_DONE = object()
+
+
 class Engine:
     """Holds loaded model runners in unified memory. One resident model by default."""
 
     def __init__(self) -> None:
         self._runners: dict[str, Runner] = {}
         self._lock = threading.Lock()
+        # Single thread for every MLX call; also serializes concurrent
+        # generations, which the GPU would serialize anyway.
+        self._mlx_thread = ThreadPoolExecutor(max_workers=1, thread_name_prefix="mlx")
 
     # --- lifecycle -----------------------------------------------------------
     def load_model(
@@ -48,7 +62,9 @@ class Engine:
                 return self._runners[model_id]
             runner = Runner(model_id, local_path, context_length, enable_thinking=enable_thinking)
             if MLX_AVAILABLE:
-                runner.model, runner.tokenizer = load(local_path)
+                runner.model, runner.tokenizer = self._mlx_thread.submit(
+                    load, local_path
+                ).result()
             self._runners[model_id] = runner
             return runner
 
@@ -89,15 +105,39 @@ class Engine:
             return
 
         prompt = self._render_prompt(runner, messages)
-        sampler = make_sampler(temp=temperature, top_p=top_p)
-        for chunk in stream_generate(
-            runner.model,
-            runner.tokenizer,
-            prompt,
-            max_tokens=max_tokens,
-            sampler=sampler,
-        ):
-            yield getattr(chunk, "text", str(chunk))
+        tokens: queue.Queue = queue.Queue()
+        stop = threading.Event()
+
+        def _produce() -> None:
+            try:
+                sampler = make_sampler(temp=temperature, top_p=top_p)
+                for chunk in stream_generate(
+                    runner.model,
+                    runner.tokenizer,
+                    prompt,
+                    max_tokens=max_tokens,
+                    sampler=sampler,
+                ):
+                    if stop.is_set():
+                        break
+                    tokens.put(getattr(chunk, "text", str(chunk)))
+            except Exception as exc:  # noqa: BLE001 - surfaced to the consumer
+                tokens.put(exc)
+            finally:
+                tokens.put(_DONE)
+
+        self._mlx_thread.submit(_produce)
+        try:
+            while True:
+                item = tokens.get()
+                if item is _DONE:
+                    break
+                if isinstance(item, Exception):
+                    raise item
+                yield item
+        finally:
+            # Client gone or error: tell the producer to stop at the next token.
+            stop.set()
 
     @staticmethod
     def _render_prompt(runner: Runner, messages: list[dict]) -> str:

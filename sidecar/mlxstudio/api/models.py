@@ -22,15 +22,16 @@ from ..services.engine import engine
 router = APIRouter(prefix="/models", tags=["models"], dependencies=[Depends(require_internal_token)])
 
 
+def _model_out(m: Model) -> ModelOut:
+    item = ModelOut.model_validate(m)
+    item.status = "running" if engine.is_loaded(m.id) else m.status
+    item.chat_capable = hf_catalog.is_chat_model(m.hf_repo_id)
+    return item
+
+
 @router.get("", response_model=list[ModelOut])
 def list_models(db: Session = Depends(get_db)):
-    rows = db.scalars(select(Model)).all()
-    out = []
-    for m in rows:
-        item = ModelOut.model_validate(m)
-        item.status = "running" if engine.is_loaded(m.id) else m.status
-        out.append(item)
-    return out
+    return [_model_out(m) for m in db.scalars(select(Model)).all()]
 
 
 @router.get("/{model_id}", response_model=ModelOut)
@@ -38,9 +39,7 @@ def get_model(model_id: str, db: Session = Depends(get_db)):
     m = db.get(Model, model_id)
     if not m:
         raise HTTPException(404, "Model not found")
-    item = ModelOut.model_validate(m)
-    item.status = "running" if engine.is_loaded(model_id) else m.status
-    return item
+    return _model_out(m)
 
 
 @router.get("/{model_id}/estimate")
@@ -51,39 +50,32 @@ def estimate_memory(model_id: str, context_length: int = 4096, db: Session = Dep
     if not m or not m.local_path:
         raise HTTPException(404, "Model not installed")
 
-    config = estimator.read_config(m.local_path)
     # Fall back to params/quant parsed from the repo name when the DB row lacks
     # them (downloads stored before metadata was captured).
     meta = hf_catalog.parse_repo_meta(m.hf_repo_id)
     params_b = m.params_b if m.params_b is not None else meta["params_b"]
     quant = m.quantization or meta["quantization"]
-    weight = estimator.weight_bytes(params_b, quant)
-    if weight is None:
-        budget = metrics.available_for_models(engine.loaded())
+    budget = metrics.available_for_models(engine.loaded())
+    total_usable = metrics.usable_total()
+
+    breakdown = estimator.installed_breakdown(m.local_path, params_b, quant, context_length)
+    if breakdown is None:
+        config = estimator.read_config(m.local_path)
         return {
             "context_length": context_length,
             "est_ram_bytes": None,
             "fit": "unknown",
             "budget_bytes": budget,
-            "total_usable_bytes": metrics.usable_total(),
+            "total_usable_bytes": total_usable,
             "max_context": (config or {}).get("max_position_embeddings"),
         }
 
-    kv = estimator.kv_cache_bytes(config, context_length) if config else int(0.1 * weight)
-    overhead = int(0.15 * weight)
-    est = weight + kv + overhead
-    budget = metrics.available_for_models(engine.loaded())
-    total_usable = metrics.usable_total()
     return {
         "context_length": context_length,
-        "weight_bytes": weight,
-        "kv_cache_bytes": kv,
-        "overhead_bytes": overhead,
-        "est_ram_bytes": est,
-        "fit": metrics.classify_fit(est, budget, total_usable),
+        **breakdown,
+        "fit": metrics.classify_fit(breakdown["est_ram_bytes"], budget, total_usable),
         "budget_bytes": budget,
         "total_usable_bytes": total_usable,
-        "max_context": (config or {}).get("max_position_embeddings"),
     }
 
 
@@ -92,18 +84,32 @@ def start_model(model_id: str, req: StartModelRequest, db: Session = Depends(get
     m = db.get(Model, model_id)
     if not m or not m.local_path:
         raise HTTPException(404, "Model not installed")
+    if not hf_catalog.is_chat_model(m.hf_repo_id):
+        raise HTTPException(
+            422,
+            detail={
+                "type": "not_chat_capable",
+                "message": f"'{m.display_name}' is not a chat model, so it cannot be started.",
+            },
+        )
 
     ctx = req.context_length or m.context_length or 4096
-    config = estimator.read_config(m.local_path)
-    est = estimator.estimate_ram(m.params_b, m.quantization, config, ctx)
-    budget = metrics.available_for_models(engine.loaded())
-    if est is not None and est > budget:
+    # Block only what can never fit: macOS reclaims inactive pages and file
+    # cache under pressure, so "free right now" is not the real ceiling. The UI
+    # surfaces the tight-fit case as a warning instead.
+    breakdown = estimator.installed_breakdown(m.local_path, m.params_b, m.quantization, ctx)
+    total_usable = metrics.usable_total()
+    if breakdown is not None and breakdown["est_ram_bytes"] > total_usable:
         raise HTTPException(
             409,
             detail={
                 "type": "insufficient_memory",
-                "message": "Not enough free memory to load this model.",
-                "detail": {"required": est, "available": budget},
+                "message": (
+                    "This model does not fit this machine: it needs "
+                    f"~{breakdown['est_ram_bytes'] / 1e9:.0f} GB but at most "
+                    f"~{total_usable / 1e9:.0f} GB of memory can be freed."
+                ),
+                "detail": {"required": breakdown["est_ram_bytes"], "usable": total_usable},
             },
         )
 

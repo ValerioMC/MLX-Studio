@@ -1,8 +1,9 @@
-"""Resumable, throttled model downloads from the Hugging Face Hub.
+"""Resumable model downloads from the Hugging Face Hub.
 
 Progress is published to an asyncio queue per job; routers stream it over SSE.
-Uses huggingface_hub.snapshot_download in a worker thread (it handles resume and
-hf_transfer acceleration); we sample size on disk to compute speed."""
+Files are fetched one by one with huggingface_hub.hf_hub_download (which skips
+files already complete on disk), so pause/cancel take effect at the next file
+boundary; we sample size on disk to compute speed."""
 
 from __future__ import annotations
 
@@ -21,11 +22,11 @@ from ..config import get_settings
 logger = logging.getLogger(__name__)
 
 try:
-    from huggingface_hub import HfApi, snapshot_download
+    from huggingface_hub import HfApi, hf_hub_download
 
     _hf_api: HfApi | None = HfApi()
 except Exception:  # pragma: no cover
-    snapshot_download = None  # type: ignore
+    hf_hub_download = None  # type: ignore
     _hf_api = None
 
 settings = get_settings()
@@ -35,23 +36,16 @@ settings = get_settings()
 ALLOW_PATTERNS = ["*.safetensors", "*.json", "*.txt", "*.model", "tokenizer*", "*.jinja"]
 
 
-def _expected_total_bytes(repo_id: str) -> int:
-    """Sum of the sizes of the files we will download, from the Hub metadata.
-    Best-effort: returns 0 if the Hub is unreachable so progress falls back to
-    a size-on-disk estimate."""
+def _repo_files(repo_id: str) -> list[tuple[str, int]]:
+    """The (filename, size) pairs we will download, from the Hub metadata."""
     if _hf_api is None:
-        return 0
-    try:
-        info = _hf_api.model_info(repo_id, files_metadata=True, token=_hf_token())
-    except Exception:
-        logger.warning("Could not fetch size metadata for %s", repo_id)
-        return 0
-    total = 0
-    for sibling in info.siblings:
-        name = sibling.rfilename
-        if any(fnmatch.fnmatch(name, pat) for pat in ALLOW_PATTERNS):
-            total += getattr(sibling, "size", None) or 0
-    return total
+        return []
+    info = _hf_api.model_info(repo_id, files_metadata=True, token=_hf_token())
+    return [
+        (s.rfilename, getattr(s, "size", None) or 0)
+        for s in info.siblings
+        if any(fnmatch.fnmatch(s.rfilename, pat) for pat in ALLOW_PATTERNS)
+    ]
 
 
 @dataclass
@@ -144,7 +138,7 @@ class DownloadManager:
         return settings.models_path / repo_id.replace("/", "__")
 
     def _run(self, job: Job) -> None:
-        if snapshot_download is None:
+        if hf_hub_download is None:
             job.status = "failed"
             job.error = "huggingface_hub not installed"
             self._publish(job)
@@ -153,35 +147,42 @@ class DownloadManager:
         target = self._target_dir(job.repo_id)
         target.mkdir(parents=True, exist_ok=True)
 
-        # Learn the real total size up front so the progress bar and totals are
-        # meaningful (the catalog figure is only a heuristic estimate).
-        job.total_bytes = _expected_total_bytes(job.repo_id)
+        try:
+            files = _repo_files(job.repo_id)
+        except Exception as exc:
+            job.status = "failed"
+            job.error = f"Could not list repository files: {exc}"
+            self._publish(job)
+            return
+        job.total_bytes = sum(size for _, size in files)
         self._publish(job)
 
-        # Run the blocking download in a sub-thread, poll disk usage for progress.
+        # Fetch file by file in a sub-thread, checking pause/cancel between files
+        # (hf_hub_download skips files already complete on disk, so pause/resume
+        # and retries never re-download finished shards). The main loop polls
+        # disk usage for progress.
         done = threading.Event()
         err: list[Exception] = []
 
         def _download() -> None:
-            # snapshot_download resumes from disk, so retrying a transient network
-            # error (connection reset, timeout) just continues where it left off.
             attempts = 3
             try:
-                for attempt in range(attempts):
+                for filename, _ in files:
                     if job._cancel.is_set() or job._pause.is_set():
                         return
-                    try:
-                        snapshot_download(
-                            repo_id=job.repo_id,
-                            local_dir=str(target),
-                            token=_hf_token(),
-                            allow_patterns=ALLOW_PATTERNS,
-                        )
-                        err.clear()
-                        return
-                    except Exception as e:  # noqa: BLE001
-                        err[:] = [e]
-                        if attempt < attempts - 1:
+                    for attempt in range(attempts):
+                        try:
+                            hf_hub_download(
+                                repo_id=job.repo_id,
+                                filename=filename,
+                                local_dir=str(target),
+                                token=_hf_token(),
+                            )
+                            break
+                        except Exception as e:  # noqa: BLE001
+                            if attempt == attempts - 1:
+                                err[:] = [e]
+                                return
                             time.sleep(2 * (attempt + 1))
             finally:
                 done.set()
@@ -192,9 +193,17 @@ class DownloadManager:
         while not done.is_set():
             if job._cancel.is_set():
                 job.status = "canceled"
+                job.speed_bps = 0
                 self._publish(job)
+                # The in-flight file may finish writing after cancel() deleted the
+                # directory; wait for the worker and sweep the leftovers.
+                done.wait()
+                shutil.rmtree(target, ignore_errors=True)
                 return
             if job._pause.is_set():
+                # The worker stops at the next file boundary; reflect the state now.
+                job.status = "paused"
+                job.speed_bps = 0
                 self._publish(job)
                 return
             cur = _dir_size(target)
