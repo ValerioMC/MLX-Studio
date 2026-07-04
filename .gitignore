@@ -1,0 +1,93 @@
+# ─── Node / Frontend (React + Vite + TS) ──────────────────────────────
+node_modules/
+.pnpm-store/
+dist/
+dist-ssr/
+build/
+.vite/
+*.local
+.eslintcache
+.cache/
+vite.config.*.timestamp-*.mjs
+vite.config.*.timestamp-*.cjs
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# ─── Rust / Tauri ─────────────────────────────────────────────────────
+src-tauri/target/
+src-tauri/gen/
+src-tauri/Cargo.lock        # keep if app is a binary; remove this line to commit it
+**/*.rs.bk
+*.pdb
+
+# Bundled sidecar binaries (built artifacts, not source)
+src-tauri/binaries/
+*.app
+*.dmg
+
+# ─── Python / FastAPI sidecar ─────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+.python-version
+.uv/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# PyInstaller / packaging output
+sidecar/build/
+sidecar/dist/
+*.spec.bak
+
+# ─── Database / runtime data ──────────────────────────────────────────
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+mlxstudio.db*
+
+# Downloaded models & runtime artifacts (never commit weights)
+models/
+.mlxstudio/
+*.safetensors
+*.gguf
+*.bin
+*.npz
+
+# Logs
+*.log
+logs/
+
+# ─── Generated code ───────────────────────────────────────────────────
+src/types/api.generated.ts
+openapi.json
+
+# ─── macOS ────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon[[:cntrl:]]
+._*
+.Spotlight-V100
+.Trashes
+
+# ─── Editors / IDE ────────────────────────────────────────────────────
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~

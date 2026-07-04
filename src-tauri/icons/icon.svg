@@ -1,0 +1,141 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Squircle shape reused for fill, clip and edge light -->
+    <rect id="squircle" x="100" y="100" width="824" height="824" rx="185.4"/>
+    <clipPath id="squircleClip"><use href="#squircle"/></clipPath>
+
+    <!-- Deep navy base: lit from the top, falling into near-black -->
+    <radialGradient id="bgGlow" cx="0.5" cy="0.28" r="1.05">
+      <stop offset="0" stop-color="#141d45"/>
+      <stop offset="0.45" stop-color="#0b1130"/>
+      <stop offset="1" stop-color="#04050e"/>
+    </radialGradient>
+
+    <!-- Faint cyan atmosphere behind the die -->
+    <radialGradient id="coreAtmo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#00dbf0" stop-opacity="0.20"/>
+      <stop offset="0.55" stop-color="#00dbf0" stop-opacity="0.06"/>
+      <stop offset="1" stop-color="#00dbf0" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Die face: brushed dark slate, lighter at top -->
+    <linearGradient id="dieFace" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1d2554"/>
+      <stop offset="0.5" stop-color="#131a3e"/>
+      <stop offset="1" stop-color="#0d1230"/>
+    </linearGradient>
+
+    <!-- Edge vignette for depth -->
+    <radialGradient id="vignette" cx="0.5" cy="0.5" r="0.72">
+      <stop offset="0.62" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.42"/>
+    </radialGradient>
+
+    <!-- Die bevel edge: light catches the top rim -->
+    <linearGradient id="dieEdge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8fa7d9" stop-opacity="0.9"/>
+      <stop offset="0.25" stop-color="#4a5a95" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#131a3d" stop-opacity="0.9"/>
+    </linearGradient>
+
+    <!-- Neon signal stroke: ice-white heart of a cyan beam -->
+    <linearGradient id="beam" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#00c4ea"/>
+      <stop offset="0.5" stop-color="#aefaff"/>
+      <stop offset="1" stop-color="#00c4ea"/>
+    </linearGradient>
+
+    <!-- Squircle top sheen -->
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+
+    <filter id="glowWide" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="34"/>
+    </filter>
+    <filter id="glowTight" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
+    <filter id="dropShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="22"/>
+    </filter>
+  </defs>
+
+  <!-- Baked soft shadow, macOS Big Sur style -->
+  <use href="#squircle" y="14" fill="#000000" opacity="0.38" filter="url(#dropShadow)"/>
+
+  <!-- Base plate -->
+  <use href="#squircle" fill="url(#bgGlow)"/>
+
+  <g clip-path="url(#squircleClip)">
+    <!-- Cyan atmosphere behind the die -->
+    <rect x="100" y="100" width="824" height="824" fill="url(#coreAtmo)"/>
+
+    <!-- Quiet circuit traces feeding the die -->
+    <g stroke="#37c8dd" stroke-width="4" fill="none" opacity="0.24" stroke-linecap="round">
+      <path d="M 512 100 V 306"/>
+      <path d="M 372 100 V 190 L 424 242 V 306"/>
+      <path d="M 652 100 V 190 L 600 242 V 306"/>
+      <path d="M 512 924 V 718"/>
+      <path d="M 372 924 V 834 L 424 782 V 718"/>
+      <path d="M 652 924 V 834 L 600 782 V 718"/>
+    </g>
+    <g fill="#66e4f4" opacity="0.45">
+      <circle cx="512" cy="236" r="8"/>
+      <circle cx="424" cy="242" r="6"/>
+      <circle cx="600" cy="242" r="6"/>
+      <circle cx="512" cy="788" r="8"/>
+      <circle cx="424" cy="782" r="6"/>
+      <circle cx="600" cy="782" r="6"/>
+    </g>
+
+    <!-- Silicon die -->
+    <g>
+      <rect x="310" y="310" width="404" height="404" rx="64" fill="#000714" opacity="0.55" filter="url(#glowTight)"/>
+      <rect x="312" y="312" width="400" height="400" rx="62" fill="url(#dieFace)"/>
+      <rect x="312" y="312" width="400" height="400" rx="62" fill="none" stroke="url(#dieEdge)" stroke-width="4"/>
+      <rect x="322" y="322" width="380" height="380" rx="54" fill="none" stroke="#5ee6f5" stroke-opacity="0.14" stroke-width="2"/>
+      <!-- silicon micro-texture -->
+      <g stroke="#7ceaf7" stroke-opacity="0.05" stroke-width="2">
+        <line x1="340" y1="380" x2="684" y2="380"/>
+        <line x1="340" y1="452" x2="684" y2="452"/>
+        <line x1="340" y1="524" x2="684" y2="524"/>
+        <line x1="340" y1="596" x2="684" y2="596"/>
+      </g>
+      <!-- pin-1 marker -->
+      <circle cx="368" cy="368" r="10" fill="none" stroke="#7ceaf7" stroke-opacity="0.5" stroke-width="4"/>
+    </g>
+
+    <!-- Trace pads where the signal crosses the die edge -->
+    <g fill="#0d1533" stroke="#3fd4e6" stroke-opacity="0.55" stroke-width="4">
+      <rect x="292" y="618" width="40" height="60" rx="12"/>
+      <rect x="692" y="618" width="40" height="60" rx="12"/>
+    </g>
+
+    <!-- Dim signal tails outside the die -->
+    <g stroke="#2fb9cf" stroke-width="14" fill="none" stroke-linecap="round" opacity="0.55">
+      <path d="M 132 648 H 292"/>
+      <path d="M 732 648 H 892"/>
+    </g>
+
+    <!-- THE SIGNAL M: one continuous inference waveform through silicon -->
+    <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M 312 648 H 366 L 448 408 L 512 588 L 576 408 L 658 648 H 712"
+            stroke="#00dbf0" stroke-width="56" opacity="0.65" filter="url(#glowWide)"/>
+      <path d="M 312 648 H 366 L 448 408 L 512 588 L 576 408 L 658 648 H 712"
+            stroke="#00dbf0" stroke-width="40" opacity="0.9" filter="url(#glowTight)"/>
+      <path d="M 312 648 H 366 L 448 408 L 512 588 L 576 408 L 658 648 H 712"
+            stroke="url(#beam)" stroke-width="26"/>
+    </g>
+
+    <!-- Top sheen -->
+    <path d="M 100 100 H 924 V 400 Q 512 480 100 400 Z" fill="url(#sheen)"/>
+
+    <!-- Edge vignette -->
+    <rect x="100" y="100" width="824" height="824" fill="url(#vignette)"/>
+  </g>
+
+  <!-- Hairline edge light on the squircle -->
+  <use href="#squircle" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/>
+</svg>

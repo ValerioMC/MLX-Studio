@@ -1,0 +1,141 @@
+@import url("https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700&family=Exo+2:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Cyberpunk theme — near-void surfaces, cyan/magenta neon, hard geometry.
+   Colors are HSL channels in CSS vars so Tailwind utilities consume them. */
+@layer base {
+  :root {
+    --background: 240 30% 4%;
+    --foreground: 240 100% 97%;
+    --card: 240 40% 11%;
+    --card-foreground: 240 100% 97%;
+    --muted: 240 30% 15%;
+    --muted-foreground: 240 25% 64%;
+    --accent: 184 100% 50%; /* neon cyan */
+    --accent-foreground: 240 60% 5%;
+    --destructive: 351 100% 56%; /* neon red */
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 38% 17%;
+    --input: 240 38% 17%;
+    --ring: 184 100% 50%;
+    --sidebar: 240 42% 6%;
+    --radius: 0.25rem;
+
+    /* neon extras */
+    --neon-magenta: 327 100% 50%;
+    --grad-headline: linear-gradient(
+      100deg,
+      hsl(184 100% 55%) 0%,
+      hsl(190 100% 70%) 18%,
+      hsl(327 100% 55%) 62%,
+      hsl(51 100% 50%) 100%
+    );
+  }
+
+  /* Deeper void for explicit dark mode. */
+  .dark {
+    --background: 240 35% 2.5%;
+    --foreground: 240 100% 98%;
+    --card: 240 42% 9%;
+    --card-foreground: 240 100% 98%;
+    --muted: 240 32% 14%;
+    --muted-foreground: 240 24% 66%;
+    --accent: 184 100% 52%;
+    --accent-foreground: 240 60% 4%;
+    --destructive: 351 100% 58%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 40% 18%;
+    --input: 240 40% 18%;
+    --ring: 184 100% 52%;
+    --sidebar: 240 45% 4%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: "Exo 2", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
+    /* subtle cyan top-glow + faint tech grid */
+    background-image:
+      radial-gradient(ellipse 80% 55% at 50% -12%, hsl(184 100% 50% / 0.08), transparent 70%),
+      linear-gradient(hsl(240 50% 60% / 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(240 50% 60% / 0.035) 1px, transparent 1px);
+    background-size: 100% 100%, 38px 38px, 38px 38px;
+    background-attachment: fixed;
+  }
+
+  /* Display headings: Orbitron + neon gradient. */
+  h1 {
+    font-family: "Orbitron", system-ui, sans-serif;
+    letter-spacing: 0.01em;
+    background: var(--grad-headline);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  h2,
+  h3 {
+    font-family: "Orbitron", system-ui, sans-serif;
+    letter-spacing: 0.01em;
+  }
+
+  ::selection {
+    background: hsl(var(--accent));
+    color: hsl(var(--background));
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+}
+
+@layer utilities {
+  .no-drag {
+    -webkit-app-region: no-drag;
+  }
+  /* Neon gradient text helper. */
+  .text-gradient {
+    background: var(--grad-headline);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .glow-accent {
+    box-shadow:
+      0 0 8px hsl(var(--accent) / 0.6),
+      0 0 20px hsl(var(--accent) / 0.3);
+  }
+  .text-glow {
+    text-shadow: 0 0 10px hsl(var(--accent) / 0.6);
+  }
+
+  /* Neon scrollbar. */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--accent) / 0.5);
+    border-radius: 2px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--accent) / 0.8);
+    box-shadow: 0 0 8px hsl(var(--accent) / 0.6);
+  }
+}
