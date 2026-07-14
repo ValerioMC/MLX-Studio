@@ -12,7 +12,17 @@ mkdir -p "$OUT_DIR"
 
 echo "Building sidecar for $TARGET_TRIPLE …"
 [ -d .venv ] || uv venv --quiet
-uv pip install --quiet -e ".[mlx]" pyinstaller
+
+# MLX only ships wheels for Apple Silicon; on other archs the engine runs
+# with its stub and the binary is built without mlx/mlx_lm.
+MLX_COLLECT_FLAGS=()
+if [ "$(uname -m)" = "arm64" ]; then
+  uv pip install --quiet -e ".[mlx]" pyinstaller
+  MLX_COLLECT_FLAGS=(--collect-all mlx --collect-all mlx_lm --collect-all mlx_metal)
+else
+  echo "Non-Apple-Silicon host: bundling without MLX (engine stub)."
+  uv pip install --quiet -e . pyinstaller
+fi
 
 uv run pyinstaller \
   --onefile \
@@ -20,9 +30,7 @@ uv run pyinstaller \
   --paths . \
   --collect-submodules mlxstudio \
   --collect-all huggingface_hub \
-  --collect-all mlx \
-  --collect-all mlx_lm \
-  --collect-all mlx_metal \
+  ${MLX_COLLECT_FLAGS[@]+"${MLX_COLLECT_FLAGS[@]}"} \
   --hidden-import uvicorn.logging \
   -c run_server.py
 

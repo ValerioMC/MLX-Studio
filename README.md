@@ -5,6 +5,20 @@ Local AI for Apple Silicon, made simple. Discover, download, run, and chat with
 
 > Think Ollama, but native to Apple Silicon and built around the MLX runtime.
 
+## Download
+
+Latest builds (rebuilt automatically from `main` on every push, tag [`latest`](https://github.com/ValerioMC/MLX-Studio/releases/tag/latest)):
+
+| Mac | Download |
+|---|---|
+| Apple Silicon (M1 and later) | [MLX-Studio_apple-silicon.dmg](https://github.com/ValerioMC/MLX-Studio/releases/download/latest/MLX-Studio_apple-silicon.dmg) |
+| Intel | [MLX-Studio_intel.dmg](https://github.com/ValerioMC/MLX-Studio/releases/download/latest/MLX-Studio_intel.dmg) |
+
+The Intel build ships without the MLX engine (MLX requires Apple Silicon): the UI
+and the local API work, but model inference is not available.
+
+Builds are unsigned: on first launch, right-click the app and choose **Open**.
+
 ## Stack
 
 | Layer | Tech |
@@ -63,6 +77,19 @@ plain browser (`pnpm dev`) it falls back to localhost defaults.
 pnpm sidecar:build          # PyInstaller → src-tauri/binaries/
 pnpm tauri:build            # produces MLX Studio.app + .dmg
 ```
+
+On non-Apple-Silicon machines `pnpm sidecar:build` bundles the sidecar without
+MLX (the engine falls back to its stub).
+
+### CI releases
+
+Every push to `main` runs [`release-latest.yml`](./.github/workflows/release-latest.yml):
+it builds the app on `macos-14` (Apple Silicon) and `macos-15-intel` (Intel),
+then recreates the GitHub release tagged `latest` with both DMGs
+(`MLX-Studio_apple-silicon.dmg`, `MLX-Studio_intel.dmg`). The workflow can also
+be triggered manually from the Actions tab. Current version: **0.4.0** (kept in
+sync across `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`,
+`sidecar/pyproject.toml`, and `sidecar/mlxstudio/__init__.py`).
 
 ## Using the OpenAI-compatible API
 

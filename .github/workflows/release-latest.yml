@@ -1,0 +1,101 @@
+name: Release latest
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-latest
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            arch: apple-silicon
+          - runner: macos-15-intel
+            arch: intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Python sidecar (PyInstaller)
+        run: pnpm sidecar:build
+
+      - name: Build Tauri app
+        run: pnpm tauri:build
+
+      - name: Rename DMG to a stable asset name
+        run: |
+          dmg="$(ls src-tauri/target/release/bundle/dmg/*.dmg)"
+          mv "$dmg" "MLX-Studio_${{ matrix.arch }}.dmg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dmg-${{ matrix.arch }}
+          path: MLX-Studio_${{ matrix.arch }}.dmg
+          if-no-files-found: error
+
+  release:
+    name: Publish "latest" release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Recreate the latest release with fresh assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(jq -r .version package.json)"
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest \
+            --target "$GITHUB_SHA" \
+            --title "MLX Studio $version (latest)" \
+            --notes "Automated build of \`main\` @ $GITHUB_SHA.
+
+          | Mac | Download |
+          |---|---|
+          | Apple Silicon (M1 and later) | MLX-Studio_apple-silicon.dmg |
+          | Intel | MLX-Studio_intel.dmg (no MLX engine: UI and API only) |
+
+          Unsigned build: on first launch, right-click the app and choose Open." \
+            --latest \
+            dist/*.dmg
