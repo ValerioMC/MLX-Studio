@@ -4,11 +4,13 @@ import { Badge, Button, Card } from "@/components/ui/primitives";
 import type { Model } from "@/types";
 import { Check, Copy, X } from "lucide-react";
 
-type SnippetLang = "openai" | "langchain" | "curl";
+type SnippetLang = "openai" | "langchain" | "java" | "rust" | "curl";
 
 const TABS: { id: SnippetLang; label: string }[] = [
   { id: "openai", label: "Python (OpenAI SDK)" },
   { id: "langchain", label: "LangChain" },
+  { id: "java", label: "Java (LangChain4j)" },
+  { id: "rust", label: "Rust (Rig)" },
   { id: "curl", label: "curl" },
 ];
 
@@ -49,6 +51,41 @@ llm = ChatOpenAI(
 
 response = llm.invoke("Hello! Introduce yourself in one sentence.")
 print(response.content)`;
+    case "java":
+      return `// Maven: dev.langchain4j:langchain4j-open-ai
+// Spring Boot: dev.langchain4j:langchain4j-open-ai-spring-boot-starter
+// and in application.properties:
+//   langchain4j.open-ai.chat-model.base-url=${apiBase}
+//   langchain4j.open-ai.chat-model.api-key=${apiKey}
+//   langchain4j.open-ai.chat-model.model-name=${modelId}
+// then inject ChatModel where you need it. Plain Java:
+
+import dev.langchain4j.model.openai.OpenAiChatModel;
+
+OpenAiChatModel model = OpenAiChatModel.builder()
+        .baseUrl("${apiBase}")
+        .apiKey("${apiKey}")
+        .modelName("${modelId}")
+        .build();
+
+String reply = model.chat("Hello! Introduce yourself in one sentence.");
+System.out.println(reply);`;
+    case "rust":
+      return `// cargo add rig-core tokio --features tokio/macros
+use rig::prelude::*;
+use rig::providers::openai;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = openai::Client::from_url("${apiKey}", "${apiBase}");
+    let agent = client.agent("${modelId}").build();
+
+    let reply = agent
+        .prompt("Hello! Introduce yourself in one sentence.")
+        .await?;
+    println!("{reply}");
+    Ok(())
+}`;
     case "curl":
       return `curl ${apiBase}/chat/completions \\
   -H "Authorization: Bearer ${apiKey}" \\

@@ -96,7 +96,7 @@ sync across `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`,
 Point any OpenAI client at the local server. Every installed model is served:
 if it is not running yet, it loads automatically on the first request.
 `GET /v1/models` lists all installed models. In the app, the **Models** tab has
-a Connect button per model with ready-to-copy snippets (OpenAI SDK, LangChain, curl).
+a Connect button per model with ready-to-copy snippets (OpenAI SDK, LangChain, LangChain4j, Rig, curl).
 
 ```python
 from openai import OpenAI
@@ -118,7 +118,7 @@ Find the API key under **Settings ▸ API**.
 - **Dashboard**: installed/running models, live memory gauge, recent activity
 - **Catalog**: search `mlx-community` models, filter by params/quant/vision/instruct, memory-fit badge (Fits / Tight / Too big / Unknown), model card dialog (README, license, downloads)
 - **Downloads**: resumable downloads with live speed + progress (SSE); pause/cancel take effect at the next file boundary
-- **Models**: start, stop, delete, update; memory estimate before load; per-model Connect dialog with code snippets (OpenAI SDK, LangChain, curl); non-chat repos (ASR, embeddings) are flagged and not startable
+- **Models**: start, stop, delete, update; memory estimate before load; per-model Connect dialog with code snippets (Python OpenAI SDK, LangChain, Java LangChain4j, Rust Rig, curl); non-chat repos (ASR, embeddings) are flagged and not startable
 - **Chat**: streaming responses, Markdown + code highlighting, persisted conversation history, tokens/sec per reply; image attachments (file picker or paste) when the running model supports vision
 - **Vision models**: repos with a vision tower (Qwen-VL, LLaVA, ...) load through `mlx-vlm`; the `/v1` API accepts OpenAI-style `image_url` content parts (base64 data URLs or http URLs)
 - **Settings**: models directory, API base URL/key, theme, optional Hugging Face token (raises download rate limits)
