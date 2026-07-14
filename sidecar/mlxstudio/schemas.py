@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -49,9 +51,25 @@ class DownloadRequest(BaseModel):
 
 
 # --- OpenAI-compatible ---
+class TextPart(BaseModel):
+    type: Literal["text"]
+    text: str
+
+
+class ImageUrl(BaseModel):
+    # Either an http(s) URL or a base64 data: URL, as in the OpenAI API.
+    url: str
+
+
+class ImagePart(BaseModel):
+    type: Literal["image_url"]
+    image_url: ImageUrl
+
+
 class ChatMessage(BaseModel):
     role: str
-    content: str
+    # Plain text, or OpenAI-style content parts for multimodal (vision) input.
+    content: str | list[TextPart | ImagePart]
 
 
 class ChatCompletionRequest(BaseModel):

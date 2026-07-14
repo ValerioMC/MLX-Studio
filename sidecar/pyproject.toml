@@ -18,7 +18,9 @@ dependencies = [
 [project.optional-dependencies]
 # Installed only on Apple Silicon; the server runs without it (engine falls back
 # to an echo stub) so the rest of the app can be developed on any machine.
-mlx = ["mlx-lm>=0.16"]
+# mlx-vlm is pinned below 0.6.4: that release truncates every generation after
+# the first one in a process to a single token (verified with Qwen2.5-VL-3B).
+mlx = ["mlx-lm>=0.16", "mlx-vlm>=0.6.3,<0.6.4"]
 dev = ["pytest>=8.0", "ruff>=0.5", "pyinstaller>=6.0"]
 
 [build-system]

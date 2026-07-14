@@ -1,8 +1,13 @@
 import { apiKeyHeaders, baseUrl } from "./client";
 
+export type ContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 export interface ChatMsg {
   role: "system" | "user" | "assistant";
-  content: string;
+  /** Plain text, or OpenAI-style content parts when images are attached. */
+  content: string | ContentPart[];
 }
 
 /**
@@ -33,7 +38,10 @@ export function streamChat(
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new Error(
-        body?.detail?.message || body?.error?.message || body?.detail || res.statusText,
+        body?.detail?.message ||
+          body?.error?.message ||
+          body?.detail ||
+          res.statusText,
       );
     }
     if (!res.body) return;
@@ -55,7 +63,8 @@ export function streamChat(
           const json = JSON.parse(payload);
           const delta = json.choices?.[0]?.delta?.content;
           if (delta) onToken(delta);
-          if (json.usage?.tok_per_sec) meta = { tokPerSec: json.usage.tok_per_sec };
+          if (json.usage?.tok_per_sec)
+            meta = { tokPerSec: json.usage.tok_per_sec };
         } catch {
           /* ignore */
         }
@@ -64,7 +73,11 @@ export function streamChat(
     onDone(meta);
   })().catch((e) =>
     // A user-initiated stop is not an error.
-    onDone(ctrl.signal.aborted ? {} : { error: (e as Error).message || "Request failed" }),
+    onDone(
+      ctrl.signal.aborted
+        ? {}
+        : { error: (e as Error).message || "Request failed" },
+    ),
   );
   return () => ctrl.abort();
 }

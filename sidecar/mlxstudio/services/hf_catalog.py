@@ -119,28 +119,39 @@ def search(query: CatalogQuery) -> list[dict]:
         try:
             from .settings_store import get_hf_token
 
-            models = _api.list_models(
-                author="mlx-community",
-                search=query.q or None,
-                sort="downloads",
-                limit=max(query.limit * 2, 40),
-                token=get_hf_token(),
-            )
+            token = get_hf_token()
+            # The Hub query returns the top repos by downloads; local-only
+            # filters would come back empty for anything rare in that slice.
+            # Vision models are exactly that case, so ask the Hub for the
+            # names the vision heuristic matches.
+            searches: list[str | None] = [query.q or None]
+            if query.vision and not query.q:
+                searches = ["VL", "vision", "llava"]
+            seen: set[str] = set()
             results = []
-            for m in models:
-                if _NON_LLM_RE.search(m.id):
-                    continue
-                meta = parse_repo_meta(m.id)
-                results.append(
-                    {
-                        "hf_repo_id": m.id,
-                        "display_name": m.id.split("/")[-1].replace("-", " "),
-                        "description": None,
-                        "context_length": None,
-                        "downloads_30d": getattr(m, "downloads", 0),
-                        **meta,
-                    }
-                )
+            for term in searches:
+                for m in _api.list_models(
+                    author="mlx-community",
+                    search=term,
+                    sort="downloads",
+                    limit=max(query.limit * 2, 40),
+                    token=token,
+                ):
+                    if m.id in seen or _NON_LLM_RE.search(m.id):
+                        continue
+                    seen.add(m.id)
+                    meta = parse_repo_meta(m.id)
+                    results.append(
+                        {
+                            "hf_repo_id": m.id,
+                            "display_name": m.id.split("/")[-1].replace("-", " "),
+                            "description": None,
+                            "context_length": None,
+                            "downloads_30d": getattr(m, "downloads", 0),
+                            **meta,
+                        }
+                    )
+            results.sort(key=lambda r: r.get("downloads_30d") or 0, reverse=True)
         except Exception:
             logger.exception("Hugging Face catalog query failed; serving seed list")
             results = list(_SEED)

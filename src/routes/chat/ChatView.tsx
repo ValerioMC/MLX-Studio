@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
 import { streamChat, type ChatMsg } from "@/lib/api/chat";
@@ -7,7 +7,17 @@ import { Markdown } from "@/components/chat/Markdown";
 import { useChat } from "@/stores/chat";
 import { cn } from "@/lib/utils";
 import type { Conversation, Model } from "@/types";
-import { Send, Square, Plus, Trash2, MessageSquare } from "lucide-react";
+import {
+  Send,
+  Square,
+  Plus,
+  Trash2,
+  MessageSquare,
+  ImagePlus,
+  X,
+} from "lucide-react";
+
+const MAX_ATTACHMENTS = 4;
 
 interface StoredMessage {
   role: ChatMsg["role"];
@@ -17,7 +27,10 @@ interface StoredMessage {
 
 export function ChatView() {
   const qc = useQueryClient();
-  const { data: models } = useQuery({ queryKey: ["models"], queryFn: () => api<Model[]>("/models") });
+  const { data: models } = useQuery({
+    queryKey: ["models"],
+    queryFn: () => api<Model[]>("/models"),
+  });
   const { data: convs } = useQuery({
     queryKey: ["conversations"],
     queryFn: () => api<{ items: Conversation[] }>("/conversations"),
@@ -38,10 +51,33 @@ export function ChatView() {
     reset,
   } = useChat();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  // Pending image attachments as data URLs; only offered for vision models.
+  const [attachments, setAttachments] = useState<string[]>([]);
 
   const active = model || running[0]?.id || "";
+  const activeModel = running.find((m) => m.id === active);
+  const canAttach = !!activeModel?.vision;
 
-  const persistExchange = (convId: string, userText: string, assistant: StoredMessage) => {
+  const addImages = (files: Iterable<File>) => {
+    for (const file of files) {
+      if (!file.type.startsWith("image/")) continue;
+      const reader = new FileReader();
+      reader.onload = () =>
+        setAttachments((prev) =>
+          prev.length >= MAX_ATTACHMENTS
+            ? prev
+            : [...prev, String(reader.result)],
+        );
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const persistExchange = (
+    convId: string,
+    userText: string,
+    assistant: StoredMessage,
+  ) => {
     api(`/conversations/${convId}/messages`, {
       method: "POST",
       body: JSON.stringify({
@@ -55,11 +91,20 @@ export function ChatView() {
   };
 
   const send = async () => {
-    if (!input.trim() || !active || busy) return;
+    if ((!input.trim() && attachments.length === 0) || !active || busy) return;
     const userText = input;
-    const next = [...messages, { role: "user" as const, content: userText }];
+    const userImages = attachments;
+    const next = [
+      ...messages,
+      {
+        role: "user" as const,
+        content: userText,
+        images: userImages.length ? userImages : undefined,
+      },
+    ];
     setMessages([...next, { role: "assistant", content: "", streaming: true }]);
     setInput("");
+    setAttachments([]);
     setBusy(true);
 
     let convId = conversationId;
@@ -80,7 +125,22 @@ export function ChatView() {
     // without reading state mid-update.
     let assistantText = "";
 
-    const history: ChatMsg[] = next.map(({ role, content }) => ({ role, content }));
+    // Messages with images become OpenAI-style content parts; past images stay
+    // in the history so a vision model keeps seeing them on follow-up turns.
+    const history: ChatMsg[] = next.map(({ role, content, images }) =>
+      images?.length
+        ? {
+            role,
+            content: [
+              ...images.map((url) => ({
+                type: "image_url" as const,
+                image_url: { url },
+              })),
+              ...(content ? [{ type: "text" as const, text: content }] : []),
+            ],
+          }
+        : { role, content },
+    );
     setAbort(
       streamChat(
         active,
@@ -95,7 +155,9 @@ export function ChatView() {
               content: copy[copy.length - 1].content + token,
             };
             requestAnimationFrame(() =>
-              scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }),
+              scrollRef.current?.scrollTo({
+                top: scrollRef.current.scrollHeight,
+              }),
             );
             return copy;
           });
@@ -110,7 +172,9 @@ export function ChatView() {
               error: !!meta.error,
               tokPerSec: meta.tokPerSec,
               content: meta.error
-                ? [last.content, `Something went wrong: ${meta.error}`].filter(Boolean).join("\n\n")
+                ? [last.content, `Something went wrong: ${meta.error}`]
+                    .filter(Boolean)
+                    .join("\n\n")
                 : last.content,
             };
             return copy;
@@ -136,7 +200,9 @@ export function ChatView() {
   const openConversation = async (c: Conversation) => {
     if (busy || c.id === conversationId) return;
     try {
-      const res = await api<{ items: StoredMessage[] }>(`/conversations/${c.id}/messages`);
+      const res = await api<{ items: StoredMessage[] }>(
+        `/conversations/${c.id}/messages`,
+      );
       setMessages(
         res.items.map((m) => ({
           role: m.role,
@@ -160,7 +226,13 @@ export function ChatView() {
   return (
     <div className="animate-fade-in flex min-h-0 flex-1 gap-5 pt-2">
       <aside className="flex w-56 shrink-0 flex-col">
-        <Button variant="secondary" size="sm" className="mb-3 w-full" disabled={busy} onClick={reset}>
+        <Button
+          variant="secondary"
+          size="sm"
+          className="mb-3 w-full"
+          disabled={busy}
+          onClick={reset}
+        >
           <Plus className="h-4 w-4" /> New chat
         </Button>
         <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto pr-1">
@@ -176,7 +248,9 @@ export function ChatView() {
               )}
             >
               <MessageSquare className="h-3.5 w-3.5 shrink-0" />
-              <span className="min-w-0 flex-1 truncate">{c.title || "New chat"}</span>
+              <span className="min-w-0 flex-1 truncate">
+                {c.title || "New chat"}
+              </span>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -190,7 +264,9 @@ export function ChatView() {
             </div>
           ))}
           {!convs?.items.length && (
-            <p className="px-2 py-1.5 text-xs text-muted-foreground">No conversations yet.</p>
+            <p className="px-2 py-1.5 text-xs text-muted-foreground">
+              No conversations yet.
+            </p>
           )}
         </div>
       </aside>
@@ -212,7 +288,10 @@ export function ChatView() {
           </select>
         </header>
 
-        <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-2">
+        <div
+          ref={scrollRef}
+          className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-2"
+        >
           {messages.length === 0 && (
             <div className="flex h-full items-center justify-center text-center text-sm text-muted-foreground">
               {running.length
@@ -221,7 +300,12 @@ export function ChatView() {
             </div>
           )}
           {messages.map((m, i) => (
-            <div key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
+            <div
+              key={i}
+              className={
+                m.role === "user" ? "flex justify-end" : "flex justify-start"
+              }
+            >
               <div
                 className={
                   "max-w-[80%] rounded-2xl px-4 py-2.5 text-sm " +
@@ -232,40 +316,116 @@ export function ChatView() {
                       : "bg-card border border-border")
                 }
               >
-                {m.role === "assistant" ? <Markdown content={m.content || "…"} /> : m.content}
-                {m.role === "assistant" && !m.streaming && m.tokPerSec != null && (
-                  <p className="mt-1 text-right text-[10px] text-muted-foreground">
-                    {m.tokPerSec.toFixed(1)} tok/s
-                  </p>
+                {m.images && m.images.length > 0 && (
+                  <div className="mb-2 flex flex-wrap gap-2">
+                    {m.images.map((src, k) => (
+                      <img
+                        key={k}
+                        src={src}
+                        alt="attachment"
+                        className="max-h-40 rounded-lg border border-border/50 object-contain"
+                      />
+                    ))}
+                  </div>
                 )}
+                {m.role === "assistant" ? (
+                  <Markdown content={m.content || "…"} />
+                ) : (
+                  m.content
+                )}
+                {m.role === "assistant" &&
+                  !m.streaming &&
+                  m.tokPerSec != null && (
+                    <p className="mt-1 text-right text-[10px] text-muted-foreground">
+                      {m.tokPerSec.toFixed(1)} tok/s
+                    </p>
+                  )}
               </div>
             </div>
           ))}
         </div>
 
-        <div className="mt-3 flex shrink-0 items-end gap-2 rounded-xl border border-input bg-card p-2">
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                send();
-              }
-            }}
-            rows={1}
-            placeholder="Message…"
-            className="max-h-32 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm outline-none"
-          />
-          {busy ? (
-            <Button variant="destructive" size="icon" onClick={stop}>
-              <Square className="h-4 w-4" />
-            </Button>
-          ) : (
-            <Button size="icon" onClick={send} disabled={!active}>
-              <Send className="h-4 w-4" />
-            </Button>
+        <div className="mt-3 shrink-0 rounded-xl border border-input bg-card p-2">
+          {attachments.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-2 px-2 pt-1">
+              {attachments.map((src, i) => (
+                <div key={i} className="group relative">
+                  <img
+                    src={src}
+                    alt={`attachment ${i + 1}`}
+                    className="h-16 w-16 rounded-lg border border-border object-cover"
+                  />
+                  <button
+                    onClick={() =>
+                      setAttachments((prev) => prev.filter((_, k) => k !== i))
+                    }
+                    title="Remove image"
+                    className="absolute -right-1.5 -top-1.5 rounded-full border border-border bg-background p-0.5 text-muted-foreground hover:text-destructive"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
+          <div className="flex items-end gap-2">
+            {canAttach && (
+              <>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    addImages(e.target.files ?? []);
+                    e.target.value = "";
+                  }}
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  title="Attach images (or paste)"
+                  disabled={busy || attachments.length >= MAX_ATTACHMENTS}
+                  onClick={() => fileRef.current?.click()}
+                >
+                  <ImagePlus className="h-4 w-4" />
+                </Button>
+              </>
+            )}
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  send();
+                }
+              }}
+              onPaste={(e) => {
+                if (!canAttach) return;
+                const files = Array.from(e.clipboardData.files);
+                if (files.length) {
+                  e.preventDefault();
+                  addImages(files);
+                }
+              }}
+              rows={1}
+              placeholder={
+                canAttach ? "Message… (images can be pasted)" : "Message…"
+              }
+              className="max-h-32 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm outline-none"
+            />
+            {busy ? (
+              <Button variant="destructive" size="icon" onClick={stop}>
+                <Square className="h-4 w-4" />
+              </Button>
+            ) : (
+              <Button size="icon" onClick={send} disabled={!active}>
+                <Send className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -18,7 +18,7 @@ echo "Building sidecar for $TARGET_TRIPLE …"
 MLX_COLLECT_FLAGS=()
 if [ "$(uname -m)" = "arm64" ]; then
   uv pip install --quiet -e ".[mlx]" pyinstaller
-  MLX_COLLECT_FLAGS=(--collect-all mlx --collect-all mlx_lm --collect-all mlx_metal)
+  MLX_COLLECT_FLAGS=(--collect-all mlx --collect-all mlx_lm --collect-all mlx_metal --collect-all mlx_vlm)
 else
   echo "Non-Apple-Silicon host: bundling without MLX (engine stub)."
   uv pip install --quiet -e . pyinstaller

@@ -1,7 +1,10 @@
 import { create } from "zustand";
-import type { ChatMsg } from "@/lib/api/chat";
 
-export interface UIMsg extends ChatMsg {
+export interface UIMsg {
+  role: "system" | "user" | "assistant";
+  content: string;
+  /** Data URLs of images attached to a user message, for bubble rendering. */
+  images?: string[];
   streaming?: boolean;
   error?: boolean;
   tokPerSec?: number;
@@ -41,7 +44,8 @@ export const useChat = create<ChatState>((set) => ({
   setAbort: (abort) => set({ abort }),
   setMessages: (updater) =>
     set((state) => ({
-      messages: typeof updater === "function" ? updater(state.messages) : updater,
+      messages:
+        typeof updater === "function" ? updater(state.messages) : updater,
     })),
   reset: () => set({ messages: [], input: "", conversationId: null }),
 }));

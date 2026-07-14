@@ -27,7 +27,7 @@ Builds are unsigned: on first launch, right-click the app and choose **Open**.
 | Frontend | React 18 + TypeScript + Vite |
 | UI | TailwindCSS, shadcn-style primitives, lucide icons |
 | Backend (sidecar) | Python + FastAPI |
-| AI engine | `mlx-lm` |
+| AI engine | `mlx-lm` (text) + `mlx-vlm` (vision) |
 | DB | SQLite (SQLAlchemy) |
 
 Architecture details are in [`ARCHITECTURE.md`](./ARCHITECTURE.md).
@@ -119,7 +119,8 @@ Find the API key under **Settings ▸ API**.
 - **Catalog**: search `mlx-community` models, filter by params/quant/vision/instruct, memory-fit badge (Fits / Tight / Too big / Unknown), model card dialog (README, license, downloads)
 - **Downloads**: resumable downloads with live speed + progress (SSE); pause/cancel take effect at the next file boundary
 - **Models**: start, stop, delete, update; memory estimate before load; per-model Connect dialog with code snippets (OpenAI SDK, LangChain, curl); non-chat repos (ASR, embeddings) are flagged and not startable
-- **Chat**: streaming responses, Markdown + code highlighting, persisted conversation history, tokens/sec per reply
+- **Chat**: streaming responses, Markdown + code highlighting, persisted conversation history, tokens/sec per reply; image attachments (file picker or paste) when the running model supports vision
+- **Vision models**: repos with a vision tower (Qwen-VL, LLaVA, ...) load through `mlx-vlm`; the `/v1` API accepts OpenAI-style `image_url` content parts (base64 data URLs or http URLs)
 - **Settings**: models directory, API base URL/key, theme, optional Hugging Face token (raises download rate limits)
 - **OpenAI-compatible `/v1` API**: for `curl`, the OpenAI SDK, LangChain, Continue, Cursor, etc.
 
