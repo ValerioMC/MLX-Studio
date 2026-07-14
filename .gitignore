@@ -59,7 +59,7 @@ sidecar/dist/
 mlxstudio.db*
 
 # Downloaded models & runtime artifacts (never commit weights)
-models/
+/models/
 .mlxstudio/
 *.safetensors
 *.gguf
