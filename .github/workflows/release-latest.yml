@@ -14,16 +14,8 @@ concurrency:
 
 jobs:
   build:
-    name: Build ${{ matrix.arch }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-14
-            arch: apple-silicon
-          - runner: macos-15-intel
-            arch: intel
-    runs-on: ${{ matrix.runner }}
+    name: Build apple-silicon
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
 
@@ -60,12 +52,12 @@ jobs:
       - name: Rename DMG to a stable asset name
         run: |
           dmg="$(ls src-tauri/target/release/bundle/dmg/*.dmg)"
-          mv "$dmg" "MLX-Studio_${{ matrix.arch }}.dmg"
+          mv "$dmg" "MLX-Studio_apple-silicon.dmg"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: dmg-${{ matrix.arch }}
-          path: MLX-Studio_${{ matrix.arch }}.dmg
+          name: dmg-apple-silicon
+          path: MLX-Studio_apple-silicon.dmg
           if-no-files-found: error
 
   release:
@@ -91,11 +83,12 @@ jobs:
             --title "MLX Studio $version (latest)" \
             --notes "Automated build of \`main\` @ $GITHUB_SHA.
 
-          | Mac | Download |
-          |---|---|
-          | Apple Silicon (M1 and later) | MLX-Studio_apple-silicon.dmg |
-          | Intel | MLX-Studio_intel.dmg (no MLX engine: UI and API only) |
+          Requires a Mac with Apple Silicon (M1 and later): MLX-Studio_apple-silicon.dmg
 
-          Unsigned build: on first launch, right-click the app and choose Open." \
+          Unsigned build: macOS reports the downloaded app as damaged. After copying it to /Applications, clear the quarantine flag once:
+
+          \`\`\`
+          xattr -dr com.apple.quarantine \"/Applications/MLX Studio.app\"
+          \`\`\`" \
             --latest \
             dist/*.dmg

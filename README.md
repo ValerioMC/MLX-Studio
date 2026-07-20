@@ -7,17 +7,23 @@ Local AI for Apple Silicon, made simple. Discover, download, run, and chat with
 
 ## Download
 
-Latest builds (rebuilt automatically from `main` on every push, tag [`latest`](https://github.com/ValerioMC/MLX-Studio/releases/tag/latest)):
+Latest build (rebuilt automatically from `main` on every push, tag [`latest`](https://github.com/ValerioMC/MLX-Studio/releases/tag/latest)):
 
 | Mac | Download |
 |---|---|
 | Apple Silicon (M1 and later) | [MLX-Studio_apple-silicon.dmg](https://github.com/ValerioMC/MLX-Studio/releases/download/latest/MLX-Studio_apple-silicon.dmg) |
-| Intel | [MLX-Studio_intel.dmg](https://github.com/ValerioMC/MLX-Studio/releases/download/latest/MLX-Studio_intel.dmg) |
 
-The Intel build ships without the MLX engine (MLX requires Apple Silicon): the UI
-and the local API work, but model inference is not available.
+MLX requires Apple Silicon, so Intel Macs are not supported. macOS 12+.
 
-Builds are unsigned: on first launch, right-click the app and choose **Open**.
+The app is self-contained: the Python sidecar ships inside the bundle as a
+PyInstaller binary, so there is nothing to install first (no Python, no Homebrew).
+
+Builds are unsigned and not notarized, so macOS reports the downloaded app as
+"damaged". After copying it to `/Applications`, clear the quarantine flag once:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/MLX Studio.app"
+```
 
 ## Stack
 
@@ -84,10 +90,9 @@ MLX (the engine falls back to its stub).
 ### CI releases
 
 Every push to `main` runs [`release-latest.yml`](./.github/workflows/release-latest.yml):
-it builds the app on `macos-14` (Apple Silicon) and `macos-15-intel` (Intel),
-then recreates the GitHub release tagged `latest` with both DMGs
-(`MLX-Studio_apple-silicon.dmg`, `MLX-Studio_intel.dmg`). The workflow can also
-be triggered manually from the Actions tab. Current version: **0.4.0** (kept in
+it builds the app on `macos-14` (Apple Silicon), then recreates the GitHub
+release tagged `latest` with the DMG (`MLX-Studio_apple-silicon.dmg`). The
+workflow can also be triggered manually from the Actions tab. Current version: **0.4.0** (kept in
 sync across `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`,
 `sidecar/pyproject.toml`, and `sidecar/mlxstudio/__init__.py`).
 
