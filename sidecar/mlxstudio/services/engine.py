@@ -12,14 +12,18 @@ from __future__ import annotations
 import base64
 import binascii
 import json
+import logging
 import queue
 import tempfile
 import threading
 import time
-from collections.abc import Iterator
+import uuid
+from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 try:  # MLX is only present on Apple Silicon
     from mlx_lm import load, stream_generate  # type: ignore
@@ -59,6 +63,87 @@ class Runner:
 _DONE = object()
 
 
+@dataclass
+class ParsedToolCall:
+    """One tool invocation requested by the model, in OpenAI wire shape."""
+
+    id: str
+    name: str
+    # JSON-encoded arguments string, as the OpenAI API returns them.
+    arguments: str
+
+
+def scan_tool_calls(
+    chunks: Iterator[str],
+    *,
+    start_marker: str,
+    end_marker: str | None,
+    parser: Callable[[str, list[dict] | None], dict | list[dict]],
+    tools: list[dict] | None,
+) -> Iterator[str | ParsedToolCall]:
+    """Split a generated-text stream into plain text and parsed tool calls.
+
+    Text between start_marker and end_marker (or end of stream, for parsers
+    without an end marker, e.g. Mistral) is fed to the model family's parser
+    from mlx-lm. Markers can arrive split across chunks, so a tail of
+    len(start_marker)-1 characters is withheld until it can't be a marker."""
+    buffer = ""
+    in_tool = False
+    for chunk in chunks:
+        buffer += chunk
+        while True:
+            if not in_tool:
+                idx = buffer.find(start_marker)
+                if idx == -1:
+                    keep = len(start_marker) - 1
+                    if len(buffer) > keep:
+                        yield buffer[: len(buffer) - keep]
+                        buffer = buffer[len(buffer) - keep :]
+                    break
+                if idx > 0:
+                    yield buffer[:idx]
+                buffer = buffer[idx + len(start_marker) :]
+                in_tool = True
+            else:
+                if end_marker is None:
+                    break
+                idx = buffer.find(end_marker)
+                if idx == -1:
+                    break
+                yield from _parse_tool_text(buffer[:idx], parser, tools)
+                buffer = buffer[idx + len(end_marker) :]
+                in_tool = False
+    if in_tool:
+        # No end marker (or generation stopped mid-call): parse what we have.
+        yield from _parse_tool_text(buffer, parser, tools)
+    elif buffer:
+        yield buffer
+
+
+def _parse_tool_text(
+    text: str,
+    parser: Callable[[str, list[dict] | None], dict | list[dict]],
+    tools: list[dict] | None,
+) -> Iterator[ParsedToolCall]:
+    try:
+        parsed = parser(text, tools)
+    except (ValueError, json.JSONDecodeError) as exc:
+        logger.warning(
+            "Failed to parse tool call (%s: %s); tool text was likely truncated",
+            type(exc).__name__,
+            exc,
+        )
+        return
+    calls = parsed if isinstance(parsed, list) else [parsed]
+    for call in calls:
+        call_id = call.pop("id", None) or f"call_{uuid.uuid4().hex[:24]}"
+        yield ParsedToolCall(
+            id=call_id,
+            name=call["name"],
+            arguments=json.dumps(call.get("arguments") or {}, ensure_ascii=False),
+        )
+
+
 def is_vision_model(local_path: str) -> bool:
     """A repo is a vision model when its config declares a vision tower. Name
     heuristics live in the catalog; here on disk the config is authoritative."""
@@ -85,7 +170,18 @@ def normalize_chat_messages(
     for message in messages:
         content = message.get("content")
         if not isinstance(content, list):
-            text_messages.append(dict(message))
+            normalized = dict(message)
+            # Chat templates do string ops on content; assistant messages that
+            # carry only tool_calls come in with content=None.
+            if normalized.get("content") is None:
+                normalized["content"] = ""
+            # OpenAI clients send tool-call arguments as a JSON string; chat
+            # templates expect them as a mapping (they re-serialize via tojson).
+            if normalized.get("tool_calls"):
+                normalized["tool_calls"] = [
+                    _tool_call_with_parsed_arguments(tc) for tc in normalized["tool_calls"]
+                ]
+            text_messages.append(normalized)
             continue
         texts: list[str] = []
         for part in content:
@@ -104,6 +200,19 @@ def normalize_chat_messages(
                     images.append(url)
         text_messages.append({**message, "content": "\n".join(t for t in texts if t)})
     return text_messages, images, temp_files
+
+
+def _tool_call_with_parsed_arguments(tool_call: dict) -> dict:
+    function = tool_call.get("function")
+    if not isinstance(function, dict) or not isinstance(function.get("arguments"), str):
+        return tool_call
+    try:
+        arguments = json.loads(function["arguments"])
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"tool_calls[].function.arguments is not valid JSON: {function['arguments']!r}"
+        ) from exc
+    return {**tool_call, "function": {**function, "arguments": arguments}}
 
 
 def _decode_data_url(url: str) -> str:
@@ -180,6 +289,14 @@ class Engine:
     def is_loaded(self, model_id: str) -> bool:
         return model_id in self._runners
 
+    def supports_tools(self, model_id: str) -> bool:
+        """True when the loaded model's chat template has a tool-call format
+        mlx-lm can parse. Vision models and the non-MLX stub never qualify."""
+        runner = self._runners.get(model_id)
+        if runner is None or runner.is_vision:
+            return False
+        return bool(getattr(runner.tokenizer, "has_tool_calling", False))
+
     def loaded(self) -> list[dict]:
         return [
             {"model_id": r.model_id, "context_length": r.context_length, "loaded_at": r.loaded_at}
@@ -195,7 +312,8 @@ class Engine:
         temperature: float = 0.7,
         top_p: float = 1.0,
         max_tokens: int = 1024,
-    ) -> Iterator[str]:
+        tools: list[dict] | None = None,
+    ) -> Iterator[str | ParsedToolCall]:
         runner = self._runners.get(model_id)
         if runner is None:
             raise RuntimeError(f"Model '{model_id}' is not running.")
@@ -210,13 +328,23 @@ class Engine:
                     f"Model '{model_id}' is text-only and can't read images. "
                     "Start a vision model to send images."
                 )
+            if tools and runner.is_vision:
+                raise RuntimeError(
+                    f"Model '{model_id}' is a vision model; tool calling is only "
+                    "supported for text models."
+                )
+            if tools and not getattr(runner.tokenizer, "has_tool_calling", False):
+                raise RuntimeError(
+                    f"Model '{model_id}' does not support tool calling: its chat "
+                    "template has no tool-call format mlx-lm can parse."
+                )
 
             if runner.is_vision:
                 prompt = vlm_apply_chat_template(
                     runner.processor, runner.config, text_messages, num_images=len(images)
                 )
             else:
-                prompt = self._render_prompt(runner, text_messages)
+                prompt = self._render_prompt(runner, text_messages, tools)
             tokens: queue.Queue = queue.Queue()
             stop = threading.Event()
 
@@ -251,7 +379,8 @@ class Engine:
                     tokens.put(_DONE)
 
             self._mlx_thread.submit(_produce)
-            try:
+
+            def _drain() -> Iterator[str]:
                 while True:
                     item = tokens.get()
                     if item is _DONE:
@@ -259,6 +388,18 @@ class Engine:
                     if isinstance(item, Exception):
                         raise item
                     yield item
+
+            try:
+                if tools:
+                    yield from scan_tool_calls(
+                        _drain(),
+                        start_marker=runner.tokenizer.tool_call_start,  # type: ignore[union-attr]
+                        end_marker=runner.tokenizer.tool_call_end,  # type: ignore[union-attr]
+                        parser=runner.tokenizer.tool_parser,  # type: ignore[union-attr]
+                        tools=tools,
+                    )
+                else:
+                    yield from _drain()
             finally:
                 # Client gone or error: tell the producer to stop at the next token.
                 stop.set()
@@ -269,7 +410,9 @@ class Engine:
                 Path(path).unlink(missing_ok=True)
 
     @staticmethod
-    def _render_prompt(runner: Runner, messages: list[dict]) -> str:
+    def _render_prompt(
+        runner: Runner, messages: list[dict], tools: list[dict] | None = None
+    ) -> str:
         """Apply the model's chat template. Some repos ship the template as a
         separate `chat_template.jinja` the tokenizer doesn't auto-load, so fall
         back to reading it from disk before giving up with a clear message."""
@@ -277,6 +420,7 @@ class Engine:
         try:
             return tokenizer.apply_chat_template(  # type: ignore[union-attr]
                 messages,
+                tools=tools,
                 add_generation_prompt=True,
                 tokenize=False,
                 enable_thinking=runner.enable_thinking,
@@ -288,6 +432,7 @@ class Engine:
             if template_file.exists():
                 return tokenizer.apply_chat_template(  # type: ignore[union-attr]
                     messages,
+                    tools=tools,
                     add_generation_prompt=True,
                     tokenize=False,
                     enable_thinking=runner.enable_thinking,

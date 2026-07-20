@@ -15,7 +15,7 @@ from ..config import get_settings
 from ..db.session import SessionLocal
 from ..schemas import ChatCompletionRequest
 from ..security import require_api_key
-from ..services.engine import engine
+from ..services.engine import ParsedToolCall, engine
 
 router = APIRouter(prefix="/v1", tags=["openai"], dependencies=[Depends(require_api_key)])
 settings = get_settings()
@@ -62,10 +62,36 @@ def _ensure_loaded(model_id: str) -> None:
         db.close()
 
 
+def _requested_tools(req: ChatCompletionRequest) -> list[dict] | None:
+    if not req.tools or req.tool_choice == "none":
+        return None
+    return [t.model_dump(exclude_none=True) for t in req.tools]
+
+
+def _wire_tool_call(call: ParsedToolCall, index: int | None = None) -> dict:
+    wire = {
+        "id": call.id,
+        "type": "function",
+        "function": {"name": call.name, "arguments": call.arguments},
+    }
+    if index is not None:
+        wire = {"index": index, **wire}
+    return wire
+
+
 @router.post("/chat/completions")
 def chat_completions(req: ChatCompletionRequest):
     _ensure_loaded(req.model)
-    messages = [m.model_dump() for m in req.messages]
+    messages = [m.model_dump(exclude_none=True) for m in req.messages]
+    tools = _requested_tools(req)
+    if tools and not engine.supports_tools(req.model):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "type": "tools_not_supported",
+                "message": f"Model '{req.model}' does not support tool calling.",
+            },
+        )
     cid = f"chatcmpl-{uuid.uuid4().hex[:24]}"
     created = int(time.time())
 
@@ -73,25 +99,34 @@ def chat_completions(req: ChatCompletionRequest):
         def event_stream():
             t0 = time.time()
             n = 0
+            tool_call_count = 0
+
+            def chunk_payload(delta: dict) -> str:
+                chunk = {
+                    "id": cid,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": req.model,
+                    "choices": [{"index": 0, "delta": delta, "finish_reason": None}],
+                }
+                return f"data: {json.dumps(chunk)}\n\n"
+
             try:
-                for token in engine.stream_chat(
+                for event in engine.stream_chat(
                     req.model,
                     messages,
                     temperature=req.temperature,
                     top_p=req.top_p,
                     max_tokens=req.max_tokens,
+                    tools=tools,
                 ):
                     n += 1
-                    chunk = {
-                        "id": cid,
-                        "object": "chat.completion.chunk",
-                        "created": created,
-                        "model": req.model,
-                        "choices": [
-                            {"index": 0, "delta": {"content": token}, "finish_reason": None}
-                        ],
-                    }
-                    yield f"data: {json.dumps(chunk)}\n\n"
+                    if isinstance(event, ParsedToolCall):
+                        delta = {"tool_calls": [_wire_tool_call(event, tool_call_count)]}
+                        tool_call_count += 1
+                    else:
+                        delta = {"content": event}
+                    yield chunk_payload(delta)
             except Exception as exc:  # surface generation errors to the client
                 err = {
                     "id": cid,
@@ -114,7 +149,13 @@ def chat_completions(req: ChatCompletionRequest):
                 "object": "chat.completion.chunk",
                 "created": created,
                 "model": req.model,
-                "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {},
+                        "finish_reason": "tool_calls" if tool_call_count else "stop",
+                    }
+                ],
                 "usage": {"completion_tokens": n, "tok_per_sec": n / max(time.time() - t0, 1e-6)},
             }
             yield f"data: {json.dumps(done)}\n\n"
@@ -123,21 +164,37 @@ def chat_completions(req: ChatCompletionRequest):
         return StreamingResponse(event_stream(), media_type="text/event-stream")
 
     # Non-streaming
-    text = "".join(
-        engine.stream_chat(
+    text_parts: list[str] = []
+    tool_calls: list[dict] = []
+    try:
+        for event in engine.stream_chat(
             req.model,
             messages,
             temperature=req.temperature,
             top_p=req.top_p,
             max_tokens=req.max_tokens,
-        )
-    )
+            tools=tools,
+        ):
+            if isinstance(event, ParsedToolCall):
+                tool_calls.append(_wire_tool_call(event))
+            else:
+                text_parts.append(event)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    text = "".join(text_parts)
+    message: dict = {"role": "assistant", "content": text or (None if tool_calls else "")}
+    if tool_calls:
+        message["tool_calls"] = tool_calls
     return {
         "id": cid,
         "object": "chat.completion",
         "created": created,
         "model": req.model,
         "choices": [
-            {"index": 0, "message": {"role": "assistant", "content": text}, "finish_reason": "stop"}
+            {
+                "index": 0,
+                "message": message,
+                "finish_reason": "tool_calls" if tool_calls else "stop",
+            }
         ],
     }

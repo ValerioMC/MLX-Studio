@@ -98,10 +98,15 @@ sync across `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`,
 
 ## Using the OpenAI-compatible API
 
-Point any OpenAI client at the local server. Every installed model is served:
+Point any OpenAI client at the local server. Every installed chat model is served:
 if it is not running yet, it loads automatically on the first request.
-`GET /v1/models` lists all installed models. In the app, the **Models** tab has
+`GET /v1/models` lists all installed chat models. In the app, the **Models** tab has
 a Connect button per model with ready-to-copy snippets (OpenAI SDK, LangChain, LangChain4j, Rig, curl).
+
+Tool calling (`tools`, `tool_calls`, role `tool` messages, streaming deltas,
+`finish_reason: "tool_calls"`) works with models whose chat template declares a
+tool format mlx-lm can parse (Qwen, Mistral, GLM, Gemma, Kimi, ...). Requests
+with `tools` against a model without one fail with a 400.
 
 ```python
 from openai import OpenAI
@@ -127,7 +132,7 @@ Find the API key under **Settings ▸ API**.
 - **Chat**: streaming responses, Markdown + code highlighting, persisted conversation history, tokens/sec per reply; image attachments (file picker or paste) when the running model supports vision
 - **Vision models**: repos with a vision tower (Qwen-VL, LLaVA, ...) load through `mlx-vlm`; the `/v1` API accepts OpenAI-style `image_url` content parts (base64 data URLs or http URLs)
 - **Settings**: models directory, API base URL/key, theme, optional Hugging Face token (raises download rate limits)
-- **OpenAI-compatible `/v1` API**: for `curl`, the OpenAI SDK, LangChain, Continue, Cursor, etc.
+- **OpenAI-compatible `/v1` API**: for `curl`, the OpenAI SDK, LangChain, Continue, Cursor, etc.; supports tool/function calling (agentic clients) on models with a parseable tool format
 
 ## Process lifecycle
 

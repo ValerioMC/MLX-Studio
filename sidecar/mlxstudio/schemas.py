@@ -66,10 +66,39 @@ class ImagePart(BaseModel):
     image_url: ImageUrl
 
 
+class ToolFunctionDef(BaseModel):
+    name: str
+    description: str | None = None
+    # JSON Schema for the function arguments, as in the OpenAI API.
+    parameters: dict | None = None
+
+
+class ToolDef(BaseModel):
+    type: Literal["function"]
+    function: ToolFunctionDef
+
+
+class ToolCallFunction(BaseModel):
+    name: str
+    # JSON-encoded arguments string, as in the OpenAI API.
+    arguments: str
+
+
+class ToolCall(BaseModel):
+    id: str
+    type: Literal["function"] = "function"
+    function: ToolCallFunction
+
+
 class ChatMessage(BaseModel):
     role: str
-    # Plain text, or OpenAI-style content parts for multimodal (vision) input.
-    content: str | list[TextPart | ImagePart]
+    # Plain text, OpenAI-style content parts for multimodal (vision) input,
+    # or None for assistant messages that carry only tool_calls.
+    content: str | list[TextPart | ImagePart] | None = None
+    # Set on assistant messages that requested tool invocations.
+    tool_calls: list[ToolCall] | None = None
+    # Set on role="tool" messages carrying a tool result.
+    tool_call_id: str | None = None
 
 
 class ChatCompletionRequest(BaseModel):
@@ -80,3 +109,8 @@ class ChatCompletionRequest(BaseModel):
     max_tokens: int = 1024
     stream: bool = False
     stop: list[str] | None = None
+    tools: list[ToolDef] | None = None
+    # "auto" | "none" | "required" | {"type": "function", "function": {...}}.
+    # Only "none" changes behavior (tools are dropped); local models can't be
+    # forced into a specific call, so the other values behave like "auto".
+    tool_choice: str | dict | None = None
