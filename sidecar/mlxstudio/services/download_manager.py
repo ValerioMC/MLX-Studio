@@ -31,6 +31,9 @@ except Exception:  # pragma: no cover
 
 settings = get_settings()
 
+# A job in one of these states is still going to write into its directory.
+_ACTIVE_STATUSES = frozenset({"queued", "downloading", "paused"})
+
 # Only the files needed to run a model; keeps downloads lean and the size estimate
 # aligned with what actually lands on disk.
 ALLOW_PATTERNS = ["*.safetensors", "*.json", "*.txt", "*.model", "tokenizer*", "*.jinja"]
@@ -57,6 +60,9 @@ class Job:
     downloaded_bytes: int = 0
     speed_bps: int = 0
     error: str | None = None
+    # True when the job writes into an installed model's directory (an update):
+    # canceling it must never delete the weights that are already there.
+    keep_files_on_cancel: bool = False
     _cancel: threading.Event = field(default_factory=threading.Event)
     _pause: threading.Event = field(default_factory=threading.Event)
 
@@ -104,8 +110,24 @@ class DownloadManager:
             self._loop.call_soon_threadsafe(q.put_nowait, payload)
 
     # --- control -------------------------------------------------------------
-    def start(self, job_id: str, repo_id: str) -> Job:
-        job = Job(id=job_id, repo_id=repo_id, status="downloading")
+    def active_job_for(self, repo_id: str) -> Job | None:
+        """The unfinished job already fetching this repo, if any."""
+        return next(
+            (j for j in self.jobs.values() if j.repo_id == repo_id and j.status in _ACTIVE_STATUSES),
+            None,
+        )
+
+    def start(self, job_id: str, repo_id: str, *, keep_files_on_cancel: bool = False) -> Job:
+        """Start fetching a repo, or return the job already fetching it: two
+        workers writing the same directory would corrupt each other's files."""
+        if existing := self.active_job_for(repo_id):
+            return existing
+        job = Job(
+            id=job_id,
+            repo_id=repo_id,
+            status="downloading",
+            keep_files_on_cancel=keep_files_on_cancel,
+        )
         self.jobs[job_id] = job
         threading.Thread(target=self._run, args=(job,), daemon=True).start()
         return job
@@ -124,14 +146,20 @@ class DownloadManager:
             threading.Thread(target=self._run, args=(job,), daemon=True).start()
 
     def cancel(self, job_id: str) -> None:
-        """Stop a job, drop its record, and delete partial files on disk."""
+        """Stop a job and drop its record.
+
+        Partial files are deleted only for a fresh download that has not
+        finished: a completed job's directory is an installed model, and an
+        update job writes into one, so both keep their files."""
         job = self.jobs.pop(job_id, None)
         if job is None:
             return
+        finished = job.status == "completed"
         job._cancel.set()
         job.status = "canceled"
         self._publish(job)  # let subscribers drop it from their view
-        shutil.rmtree(self._target_dir(job.repo_id), ignore_errors=True)
+        if not finished and not job.keep_files_on_cancel:
+            shutil.rmtree(self._target_dir(job.repo_id), ignore_errors=True)
 
     # --- worker --------------------------------------------------------------
     def _target_dir(self, repo_id: str) -> Path:
@@ -198,7 +226,8 @@ class DownloadManager:
                 # The in-flight file may finish writing after cancel() deleted the
                 # directory; wait for the worker and sweep the leftovers.
                 done.wait()
-                shutil.rmtree(target, ignore_errors=True)
+                if not job.keep_files_on_cancel:
+                    shutil.rmtree(target, ignore_errors=True)
                 return
             if job._pause.is_set():
                 # The worker stops at the next file boundary; reflect the state now.

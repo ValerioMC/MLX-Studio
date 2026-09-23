@@ -27,6 +27,9 @@ class ModelOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+CatalogSort = Literal["downloads", "likes", "recent"]
+
+
 class CatalogQuery(BaseModel):
     q: str = ""
     params_min: float | None = None
@@ -35,7 +38,7 @@ class CatalogQuery(BaseModel):
     ctx_min: int | None = None
     vision: bool | None = None
     instruct: bool | None = None
-    sort: str = "downloads"
+    sort: CatalogSort = "downloads"
     limit: int = 30
 
 

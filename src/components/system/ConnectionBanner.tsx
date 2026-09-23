@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api, baseUrl } from "@/lib/api/client";
+import { ApiError, api, baseUrl } from "@/lib/api/client";
 import { AlertTriangle, Loader2 } from "lucide-react";
 
 type ConnectionState = "ok" | "unreachable" | "unauthorized";
@@ -19,15 +19,13 @@ async function probeBackend(): Promise<ConnectionState> {
     await api("/settings");
     return "ok";
   } catch (e) {
-    return (e as Error).message === "Unauthorized" ? "unauthorized" : "ok";
+    return e instanceof ApiError && e.status === 401 ? "unauthorized" : "ok";
   }
 }
 
 const ERROR_MESSAGES: Record<Exclude<ConnectionState, "ok">, string> = {
-  unreachable:
-    "The local engine is not responding. Quit and reopen MLX Studio; if it persists, check the logs.",
-  unauthorized:
-    "Another MLX Studio instance is holding the engine port. Quit both and reopen the app.",
+  unreachable: "The local engine is not responding. Quit and reopen MLX Studio; if it keeps happening, check the logs.",
+  unauthorized: "Another MLX Studio instance is holding the engine port. Quit both, then reopen the app.",
 };
 
 export function ConnectionBanner() {
@@ -47,24 +45,25 @@ export function ConnectionBanner() {
 
   // A cold app start legitimately takes a few seconds (the sidecar boots);
   // report progress, not failure.
-  const starting =
-    state === "unreachable" &&
-    !everConnected.current &&
-    Date.now() - mountedAt.current < STARTUP_GRACE_MS;
-
-  if (starting) {
-    return (
-      <div className="no-drag mx-8 mb-2 flex items-center gap-2 rounded-md border border-border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
-        <span>Starting the local engine…</span>
-      </div>
-    );
-  }
+  const starting = state === "unreachable" && !everConnected.current && Date.now() - mountedAt.current < STARTUP_GRACE_MS;
 
   return (
-    <div className="no-drag mx-8 mb-2 flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-      <AlertTriangle className="h-4 w-4 shrink-0" />
-      <span>{ERROR_MESSAGES[state]}</span>
+    <div className="no-drag px-8 pb-3">
+      <div
+        role="status"
+        className={
+          starting
+            ? "mx-auto flex max-w-[64rem] items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground"
+            : "mx-auto flex max-w-[64rem] items-center gap-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        }
+      >
+        {starting ? (
+          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+        ) : (
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+        )}
+        <span>{starting ? "Starting the local engine…" : ERROR_MESSAGES[state]}</span>
+      </div>
     </div>
   );
 }

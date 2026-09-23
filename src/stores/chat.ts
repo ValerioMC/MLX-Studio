@@ -1,13 +1,27 @@
 import { create } from "zustand";
+import type { FinishReason } from "@/lib/api/chat";
 
 export interface UIMsg {
+  /** Stable key for rendering; not persisted. */
+  id: string;
   role: "system" | "user" | "assistant";
   content: string;
   /** Data URLs of images attached to a user message, for bubble rendering. */
   images?: string[];
   streaming?: boolean;
-  error?: boolean;
+  /** The failure message, when generation failed. */
+  error?: string;
+  finishReason?: FinishReason;
   tokPerSec?: number;
+  timeToFirstToken?: number;
+  /** How long the model spent thinking, measured while it streamed. */
+  thoughtMs?: number;
+}
+
+let nextId = 0;
+export function messageId(): string {
+  nextId += 1;
+  return `m${Date.now().toString(36)}${nextId}`;
 }
 
 interface ChatState {
@@ -25,6 +39,8 @@ interface ChatState {
   setConversationId: (id: string | null) => void;
   setAbort: (fn: (() => void) | null) => void;
   setMessages: (updater: UIMsg[] | ((prev: UIMsg[]) => UIMsg[])) => void;
+  /** Rewrites the last message (the one streaming). */
+  updateLast: (patch: (last: UIMsg) => Partial<UIMsg>) => void;
   reset: () => void;
 }
 
@@ -44,8 +60,13 @@ export const useChat = create<ChatState>((set) => ({
   setAbort: (abort) => set({ abort }),
   setMessages: (updater) =>
     set((state) => ({
-      messages:
-        typeof updater === "function" ? updater(state.messages) : updater,
+      messages: typeof updater === "function" ? updater(state.messages) : updater,
     })),
+  updateLast: (patch) =>
+    set((state) => {
+      const last = state.messages[state.messages.length - 1];
+      if (!last) return state;
+      return { messages: [...state.messages.slice(0, -1), { ...last, ...patch(last) }] };
+    }),
   reset: () => set({ messages: [], input: "", conversationId: null }),
 }));

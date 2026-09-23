@@ -68,6 +68,33 @@ def _requested_tools(req: ChatCompletionRequest) -> list[dict] | None:
     return [t.model_dump(exclude_none=True) for t in req.tools]
 
 
+def finish_reason(tool_call_count: int, generated: int, max_tokens: int) -> str:
+    """OpenAI finish_reason: tool calls win, then hitting max_tokens is "length"
+    (the reply was cut off, so a client can offer to continue it)."""
+    if tool_call_count:
+        return "tool_calls"
+    if generated >= max_tokens:
+        return "length"
+    return "stop"
+
+
+def generation_usage(generated: int, started_at: float, first_token_at: float | None, ended_at: float) -> dict:
+    """Usage block for a finished stream. Speed is measured from the first token,
+    so prompt processing (reported separately as time_to_first_token) does not
+    drag down the decode rate on long prompts."""
+    time_to_first_token = (first_token_at - started_at) if first_token_at is not None else None
+    decode_seconds = ended_at - first_token_at if first_token_at is not None else 0.0
+    if generated > 1 and decode_seconds > 0:
+        tok_per_sec = (generated - 1) / decode_seconds
+    else:
+        tok_per_sec = 0.0
+    return {
+        "completion_tokens": generated,
+        "tok_per_sec": tok_per_sec,
+        "time_to_first_token": time_to_first_token,
+    }
+
+
 def _wire_tool_call(call: ParsedToolCall, index: int | None = None) -> dict:
     wire = {
         "id": call.id,
@@ -97,7 +124,8 @@ def chat_completions(req: ChatCompletionRequest):
 
     if req.stream:
         def event_stream():
-            t0 = time.time()
+            started_at = time.time()
+            first_token_at: float | None = None
             n = 0
             tool_call_count = 0
 
@@ -121,6 +149,8 @@ def chat_completions(req: ChatCompletionRequest):
                     tools=tools,
                 ):
                     n += 1
+                    if first_token_at is None:
+                        first_token_at = time.time()
                     if isinstance(event, ParsedToolCall):
                         delta = {"tool_calls": [_wire_tool_call(event, tool_call_count)]}
                         tool_call_count += 1
@@ -153,10 +183,10 @@ def chat_completions(req: ChatCompletionRequest):
                     {
                         "index": 0,
                         "delta": {},
-                        "finish_reason": "tool_calls" if tool_call_count else "stop",
+                        "finish_reason": finish_reason(tool_call_count, n, req.max_tokens),
                     }
                 ],
-                "usage": {"completion_tokens": n, "tok_per_sec": n / max(time.time() - t0, 1e-6)},
+                "usage": generation_usage(n, started_at, first_token_at, time.time()),
             }
             yield f"data: {json.dumps(done)}\n\n"
             yield "data: [DONE]\n\n"
@@ -166,6 +196,7 @@ def chat_completions(req: ChatCompletionRequest):
     # Non-streaming
     text_parts: list[str] = []
     tool_calls: list[dict] = []
+    generated = 0
     try:
         for event in engine.stream_chat(
             req.model,
@@ -175,6 +206,7 @@ def chat_completions(req: ChatCompletionRequest):
             max_tokens=req.max_tokens,
             tools=tools,
         ):
+            generated += 1
             if isinstance(event, ParsedToolCall):
                 tool_calls.append(_wire_tool_call(event))
             else:
@@ -194,7 +226,7 @@ def chat_completions(req: ChatCompletionRequest):
             {
                 "index": 0,
                 "message": message,
-                "finish_reason": "tool_calls" if tool_calls else "stop",
+                "finish_reason": finish_reason(len(tool_calls), generated, req.max_tokens),
             }
         ],
     }

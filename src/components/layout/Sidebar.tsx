@@ -1,105 +1,110 @@
 import { cn } from "@/lib/utils";
-import {
-  Boxes,
-  LayoutDashboard,
-  MessageSquare,
-  Download,
-  Settings,
-  Store,
-  Circle,
-} from "lucide-react";
-import { NavLink } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api/client";
-import type { Model, DownloadJob } from "@/types";
+import { NavLink, useNavigate } from "react-router-dom";
+import { useModels } from "@/lib/api/queries";
+import { activeDownloadCount, useLive } from "@/stores/live";
+import { useChat } from "@/stores/chat";
+import { useMemoryLedger } from "@/hooks/useMemoryLedger";
+import { FreeForModels, LedgerBar } from "@/components/system/MemoryLedger";
+import { Kbd, StatusDot } from "@/components/ui/primitives";
+import { contextSize } from "@/lib/format";
+import { NAV_ITEMS, SETTINGS_ITEM, type NavItem } from "./navigation";
 
-const nav = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
-  { to: "/catalog", label: "Catalog", icon: Store },
-  { to: "/downloads", label: "Downloads", icon: Download },
-  { to: "/models", label: "Models", icon: Boxes },
-  { to: "/chat", label: "Chat", icon: MessageSquare },
-];
+function NavRow({ item, badge }: { item: NavItem; badge?: number }) {
+  const Icon = item.icon;
+  return (
+    <NavLink
+      to={item.to}
+      end={item.end}
+      className={({ isActive }) =>
+        cn(
+          "group flex h-7 items-center gap-2.5 rounded-md px-2 text-base font-medium transition-colors duration-100",
+          isActive ? "bg-foreground/[0.07] text-foreground" : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground",
+        )
+      }
+    >
+      {({ isActive }) => (
+        <>
+          <Icon className={cn("h-[15px] w-[15px] shrink-0", isActive && "text-accent")} strokeWidth={2} />
+          <span className="flex-1 truncate">{item.label}</span>
+          {badge ? (
+            <span className="tabular min-w-[1.25rem] rounded-full bg-accent px-1.5 text-center text-2xs font-semibold leading-[1.1rem] text-accent-foreground">
+              {badge}
+            </span>
+          ) : (
+            <Kbd className="opacity-0 transition-opacity group-hover:opacity-100">⌘{item.shortcut}</Kbd>
+          )}
+        </>
+      )}
+    </NavLink>
+  );
+}
 
 export function Sidebar() {
-  const { data: models } = useQuery({
-    queryKey: ["models"],
-    queryFn: () => api<Model[]>("/models"),
-    refetchInterval: 4000,
-  });
-  const { data: downloads } = useQuery({
-    queryKey: ["downloads"],
-    queryFn: () => api<{ items: DownloadJob[] }>("/downloads"),
-    refetchInterval: 2000,
-  });
+  const navigate = useNavigate();
+  const { data: models } = useModels();
+  const downloads = useLive((s) => s.downloads);
+  const stats = useLive((s) => s.stats);
+  const ledger = useMemoryLedger();
+  const setModel = useChat((s) => s.setModel);
 
   const running = models?.filter((m) => m.status === "running") ?? [];
-  const activeDownloads =
-    downloads?.items.filter((d) => d.status === "downloading").length ?? 0;
+  const contextOf = new Map(stats?.loaded_models.map((m) => [m.model_id, m.context_length]) ?? []);
+  const activeDownloads = activeDownloadCount(downloads);
 
   return (
-    <aside className="flex h-full w-56 shrink-0 flex-col border-r border-border bg-sidebar">
-      {/* Space for traffic-light controls; doubles as a window drag handle */}
-      <div data-tauri-drag-region className="h-11" />
+    <aside className="flex h-full w-[13.5rem] shrink-0 flex-col border-r bg-sidebar">
+      {/* Room for the traffic lights; doubles as a window drag handle. */}
+      <div data-tauri-drag-region className="h-12 shrink-0" />
 
-      <div className="px-4 pb-4 pt-1">
-        <span className="font-display text-sm font-bold uppercase tracking-[0.2em] text-accent text-glow">
-          MLX Studio
-        </span>
+      <div data-tauri-drag-region className="px-4 pb-4">
+        <span className="text-md font-semibold tracking-[-0.01em]">MLX Studio</span>
       </div>
 
-      <nav className="no-drag flex flex-col gap-0.5 px-3">
-        {nav.map(({ to, label, icon: Icon, end }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-accent/10 text-accent text-glow ring-1 ring-accent/40"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
-              )
-            }
-          >
-            <Icon className="h-4 w-4" />
-            <span>{label}</span>
-            {label === "Downloads" && activeDownloads > 0 && (
-              <span className="ml-auto rounded-full bg-accent px-1.5 text-xs text-accent-foreground">
-                {activeDownloads}
-              </span>
-            )}
-          </NavLink>
+      <nav aria-label="Main" className="no-drag flex flex-col gap-px px-2">
+        {NAV_ITEMS.map((item) => (
+          <NavRow key={item.to} item={item} badge={item.to === "/downloads" ? activeDownloads : undefined} />
         ))}
       </nav>
 
-      <div className="mt-auto px-3 pb-2">
-        {running.length > 0 && (
-          <div className="mb-2 rounded-md bg-muted/50 p-2">
-            <p className="mb-1 px-1 text-xs font-medium text-muted-foreground">Running</p>
+      {running.length > 0 && (
+        <section aria-label="Running models" className="no-drag mt-6 px-2">
+          <h2 className="px-2 pb-1 text-xs font-medium text-muted-foreground">Running</h2>
+          <ul className="flex flex-col gap-px">
             {running.map((m) => (
-              <div key={m.id} className="flex items-center gap-2 px-1 py-0.5 text-xs">
-                <Circle className="h-2 w-2 fill-green-500 text-green-500" />
-                <span className="truncate">{m.display_name}</span>
-              </div>
+              <li key={m.id}>
+                <button
+                  type="button"
+                  title={`Chat with ${m.display_name}`}
+                  onClick={() => {
+                    setModel(m.id);
+                    navigate("/chat");
+                  }}
+                  className="flex h-7 w-full items-center gap-2.5 rounded-md px-2 text-left text-sm text-foreground/90 transition-colors hover:bg-foreground/[0.04]"
+                >
+                  <StatusDot tone="positive" className="mx-1" />
+                  <span className="min-w-0 flex-1 truncate">{m.display_name}</span>
+                  {contextOf.has(m.id) && (
+                    <span className="tabular text-2xs text-muted-foreground">{contextSize(contextOf.get(m.id) ?? 0)}</span>
+                  )}
+                </button>
+              </li>
             ))}
-          </div>
+          </ul>
+        </section>
+      )}
+
+      <div className="no-drag mt-auto flex flex-col gap-2 px-2 pb-3">
+        {ledger && (
+          <NavLink
+            to="/"
+            title="Unified memory"
+            className="flex flex-col gap-1.5 rounded-md px-2 py-2 transition-colors hover:bg-foreground/[0.04]"
+          >
+            <LedgerBar ledger={ledger} height="h-2.5" className="rounded-[4px] p-[1.5px]" />
+            <FreeForModels ledger={ledger} size="compact" />
+          </NavLink>
         )}
-        <NavLink
-          to="/settings"
-          className={({ isActive }) =>
-            cn(
-              "no-drag flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors",
-              isActive
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground",
-            )
-          }
-        >
-          <Settings className="h-4 w-4" />
-          <span>Settings</span>
-        </NavLink>
+        <NavRow item={SETTINGS_ITEM} />
       </div>
     </aside>
   );

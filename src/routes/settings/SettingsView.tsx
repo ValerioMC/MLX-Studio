@@ -1,190 +1,157 @@
-import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Button, Card } from "@/components/ui/primitives";
+import { useState, type ReactNode } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { FolderOpen } from "lucide-react";
+import { api, baseUrl, getConfig } from "@/lib/api/client";
+import { queryClient, queryKeys, useAppSettings } from "@/lib/api/queries";
 import { useUI, type Theme } from "@/stores/ui";
-import { api, getConfig } from "@/lib/api/client";
+import { CopyButton, Segmented } from "@/components/ui/controls";
+import { Button, PageHeader, fieldClass } from "@/components/ui/primitives";
+import { ChatSettingsForm } from "@/routes/chat/ChatSettings";
+import { openExternal } from "@/lib/openExternal";
+import { cn } from "@/lib/utils";
 
-interface AppSettings {
-  hf_token_set: boolean;
-  models_dir: string;
+const THEMES: readonly { value: Theme; label: string }[] = [
+  { value: "system", label: "System" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+];
+
+/** A settings group: its name and purpose on the left, controls on the right. */
+function Section({ title, description, children }: { title: string; description: ReactNode; children: ReactNode }) {
+  return (
+    <section className="grid grid-cols-1 gap-x-10 gap-y-3 border-t py-6 md:grid-cols-[15rem_minmax(0,1fr)]">
+      <div>
+        <h2 className="text-md font-semibold">{title}</h2>
+        <p className="pt-0.5 text-sm text-muted-foreground">{description}</p>
+      </div>
+      <div className="flex min-w-0 flex-col gap-3">{children}</div>
+    </section>
+  );
 }
 
-export function SettingsView() {
-  const { theme, setTheme } = useUI();
-  const cfg = getConfig();
-  const { data: settings } = useQuery({
-    queryKey: ["settings"],
-    queryFn: () => api<AppSettings>("/settings"),
+function ValueRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center gap-3 text-base">
+      <span className="w-20 shrink-0 text-muted-foreground">{label}</span>
+      <code className="min-w-0 flex-1 truncate rounded-md bg-muted/70 px-2 py-1 font-mono text-xs">{value}</code>
+      <CopyButton text={value} label={`Copy ${label.toLowerCase()}`} />
+    </div>
+  );
+}
+
+function HfTokenField({ configured }: { configured: boolean }) {
+  const [token, setToken] = useState("");
+  const [status, setStatus] = useState<string | null>(null);
+  const save = useMutation({
+    mutationFn: (value: string | null) =>
+      api<{ hf_token_set: boolean }>("/settings/hf-token", { method: "PUT", body: JSON.stringify({ token: value }) }),
+    onSuccess: (_res, value) => {
+      setToken("");
+      setStatus(value ? "Token saved." : "Token removed.");
+      void queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+    },
+    onError: (e) => setStatus(e.message),
   });
 
   return (
-    <div className="animate-fade-in space-y-6 pt-2">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-      </header>
-
-      <Section title="Appearance" desc="Theme follows the system by default.">
-        <div className="flex gap-2">
-          {(["light", "dark", "system"] as Theme[]).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTheme(t)}
-              className={
-                "rounded-md border px-3 py-1.5 text-sm capitalize transition-colors " +
-                (theme === t
-                  ? "border-accent bg-accent text-accent-foreground"
-                  : "border-border hover:bg-muted")
-              }
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-      </Section>
-
-      <Section
-        title="API"
-        desc="OpenAI-compatible local server. Port and key are stable across launches."
+    <div className="flex flex-col gap-1.5">
+      <form
+        className="flex items-center gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (token.trim()) save.mutate(token.trim());
+        }}
       >
-        <CopyableField label="Base URL" value={`http://127.0.0.1:${cfg.port}/v1`} />
-        <CopyableField label="API key" value={cfg.apiKey} />
-        <p className="text-xs text-muted-foreground">
-          Point any OpenAI client (e.g. LangChain's <span className="font-mono">ChatOpenAI</span>) at
-          the base URL with this key. Use the model id (e.g.{" "}
-          <span className="font-mono">qwen2.5-14b-instruct-4bit</span>) as the model name.
-        </p>
-      </Section>
-
-      <Section
-        title="Hugging Face"
-        desc="Optional access token. Raises download rate limits and speeds up downloads."
-      >
-        <HfTokenField />
-      </Section>
-
-      <Section title="Models directory" desc="Where weights are stored.">
-        <CopyableField label="Path" value={settings?.models_dir ?? "…"} />
-      </Section>
-
-      <Section title="Performance" desc="Defaults applied when loading a model.">
-        <Field label="Default context length" value="4096 tokens" />
-        <Field label="Memory safety reserve" value="15% of total RAM" />
-      </Section>
-    </div>
-  );
-}
-
-function CopyableField({ label, value }: { label: string; value: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
-    } catch {
-      /* clipboard unavailable */
-    }
-  };
-  return (
-    <div className="flex items-center justify-between gap-4 text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <div className="flex min-w-0 items-center gap-2">
-        <span className="truncate font-mono text-xs">{value}</span>
-        <button
-          onClick={copy}
-          className="shrink-0 rounded border border-border px-2 py-0.5 text-xs hover:bg-muted"
-        >
-          {copied ? "Copied" : "Copy"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function HfTokenField() {
-  const [token, setToken] = useState("");
-  const [configured, setConfigured] = useState<boolean | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
-
-  useEffect(() => {
-    api<{ hf_token_set: boolean }>("/settings")
-      .then((s) => setConfigured(s.hf_token_set))
-      .catch(() => setConfigured(false));
-  }, []);
-
-  const save = async (value: string) => {
-    setSaving(true);
-    setStatus(null);
-    try {
-      const res = await api<{ hf_token_set: boolean }>("/settings/hf-token", {
-        method: "PUT",
-        body: JSON.stringify({ token: value || null }),
-      });
-      setConfigured(res.hf_token_set);
-      setToken("");
-      setStatus(value ? "Token saved." : "Token cleared.");
-    } catch (e) {
-      setStatus((e as Error).message || "Failed to save token.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
         <input
           type="password"
           value={token}
           onChange={(e) => setToken(e.target.value)}
-          placeholder={configured ? "•••••••• (a token is configured)" : "hf_..."}
-          className="h-9 flex-1 rounded-md border border-input bg-card px-3 font-mono text-xs outline-none focus:ring-2 focus:ring-ring"
+          placeholder={configured ? "A token is saved. Paste a new one to replace it." : "hf_…"}
+          aria-label="Hugging Face token"
+          autoComplete="off"
+          spellCheck={false}
+          className={cn(fieldClass, "h-8 flex-1 font-mono text-xs")}
         />
-        <Button size="sm" disabled={saving || !token} onClick={() => save(token)}>
+        <Button type="submit" size="md" disabled={!token.trim()} loading={save.isPending && save.variables !== null}>
           Save
         </Button>
         {configured && (
-          <Button variant="secondary" size="sm" disabled={saving} onClick={() => save("")}>
-            Clear
+          <Button variant="secondary" loading={save.isPending && save.variables === null} onClick={() => save.mutate(null)}>
+            Remove
           </Button>
         )}
-      </div>
-      <p className="text-xs text-muted-foreground">
-        {status ??
-          (configured
-            ? "A token is configured. Enter a new one to replace it."
-            : "Create a read token at huggingface.co/settings/tokens.")}
+      </form>
+      <p className={cn("text-sm", save.isError ? "text-destructive" : "text-muted-foreground")}>
+        {status ?? (
+          <>
+            Create a read token at{" "}
+            <button
+              type="button"
+              onClick={() => void openExternal("https://huggingface.co/settings/tokens")}
+              className="text-accent hover:underline"
+            >
+              huggingface.co/settings/tokens
+            </button>
+            .
+          </>
+        )}
       </p>
     </div>
   );
 }
 
-function Section({
-  title,
-  desc,
-  children,
-}: {
-  title: string;
-  desc: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <Card className="space-y-3">
-      <div>
-        <h2 className="text-sm font-semibold">{title}</h2>
-        <p className="text-xs text-muted-foreground">{desc}</p>
-      </div>
-      {children}
-    </Card>
-  );
-}
+export function SettingsView() {
+  const { theme, setTheme } = useUI();
+  const cfg = getConfig();
+  const { data: settings } = useAppSettings();
 
-function Field({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="flex items-center justify-between gap-4 text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={mono ? "font-mono text-xs" : ""}>{value}</span>
+    <div>
+      <PageHeader title="Settings" />
+
+      <Section title="Appearance" description="System follows your Mac's light or dark setting.">
+        <Segmented label="Theme" value={theme} options={THEMES} onChange={setTheme} />
+      </Section>
+
+      <Section title="Chat" description="Applied to every chat in the app. Apps using the API send their own.">
+        <div className="max-w-[28rem]">
+          <ChatSettingsForm />
+        </div>
+      </Section>
+
+      <Section
+        title="Local API"
+        description="OpenAI-compatible. The address and key stay the same across launches."
+      >
+        <ValueRow label="Base URL" value={`${baseUrl()}/v1`} />
+        <ValueRow label="API key" value={cfg.apiKey} />
+        <p className="text-sm text-muted-foreground">
+          Use a model's id, such as <code className="font-mono text-xs">qwen2.5-7b-instruct-4bit</code>, as the model
+          name. Stopped models load on the first request.
+        </p>
+      </Section>
+
+      <Section title="Hugging Face" description="Optional. A token raises rate limits and unlocks gated models.">
+        <HfTokenField configured={settings?.hf_token_set ?? false} />
+      </Section>
+
+      <Section title="Storage" description="Where model weights are kept.">
+        <div className="flex items-center gap-3 text-base">
+          <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+          <code className="min-w-0 flex-1 truncate rounded-md bg-muted/70 px-2 py-1 font-mono text-xs">
+            {settings?.models_dir ?? "…"}
+          </code>
+          {settings && <CopyButton text={settings.models_dir} label="Copy path" />}
+        </div>
+      </Section>
+
+      <Section title="Memory" description="How MLX Studio decides whether a model fits.">
+        <p className="max-w-[52ch] text-base text-muted-foreground">
+          15% of memory is kept for macOS and your other apps. A model “fits” when it needs less than what is free
+          after that reserve; “tight” models still start, because macOS reclaims cached memory, but other apps may
+          slow down.
+        </p>
+      </Section>
     </div>
   );
 }

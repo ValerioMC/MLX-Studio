@@ -23,11 +23,13 @@ router = APIRouter(
 
 @router.post("")
 def create_download(req: DownloadRequest, db: Session = Depends(get_db)):
-    job_id = str(uuid.uuid4())
-    db.add(Activity(kind="download", message=f"Started download: {req.repo_id}"))
-    db.commit()
-    manager.start(job_id, req.repo_id)
-    return {"id": job_id, "hf_repo_id": req.repo_id, "status": "downloading"}
+    """Start a download, or hand back the one already fetching this repo."""
+    requested_id = str(uuid.uuid4())
+    job = manager.start(requested_id, req.repo_id)
+    if job.id == requested_id:
+        db.add(Activity(kind="download", message=f"Started download: {req.repo_id}"))
+        db.commit()
+    return job.snapshot()
 
 
 @router.get("")
@@ -49,6 +51,7 @@ def resume(job_id: str):
 
 @router.delete("/{job_id}")
 def cancel(job_id: str):
+    """Cancel an unfinished download, or dismiss a finished one from the list."""
     manager.cancel(job_id)
     return {"ok": True}
 

@@ -50,3 +50,25 @@ def test_matches_filters():
     assert hf_catalog._matches(row, CatalogQuery(quant="8bit")) is False
     assert hf_catalog._matches(row, CatalogQuery(vision=True)) is False
     assert hf_catalog._matches(row, CatalogQuery(instruct=True)) is True
+
+
+def test_parse_repo_meta_ignores_bit_suffix_and_moe_active_params():
+    meta = hf_catalog.parse_repo_meta("mlx-community/all-MiniLM-L6-v2-4bit")
+    assert meta["params_b"] is None
+    assert meta["instruct"] is False
+
+    moe = hf_catalog.parse_repo_meta("mlx-community/Qwen3-30B-A3B-4bit")
+    assert moe["params_b"] == 30.0
+
+
+def test_parse_repo_meta_gemma_it_suffix_is_instruct():
+    assert hf_catalog.parse_repo_meta("mlx-community/gemma-3-12b-it-4bit")["instruct"] is True
+
+
+def test_parse_repo_meta_fp4_formats():
+    assert hf_catalog.parse_repo_meta("mlx-community/gpt-oss-20b-MXFP4-Q8")["quantization"] == "mxfp4"
+
+
+def test_is_chat_model_rejects_asr_and_sentence_embedders():
+    for repo in ["mlx-community/Qwen3-ASR-0.6B-8bit", "mlx-community/all-MiniLM-L6-v2-4bit"]:
+        assert hf_catalog.is_chat_model(repo) is False, repo

@@ -1,95 +1,136 @@
-@import url("https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700&family=Exo+2:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+/* Fonts ship with the app: a desktop app must look right offline. */
+@import "@fontsource-variable/instrument-sans/standard.css";
+@import "@fontsource-variable/jetbrains-mono/index.css";
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Cyberpunk theme — near-void surfaces, cyan/magenta neon, hard geometry.
-   Colors are HSL channels in CSS vars so Tailwind utilities consume them. */
+/* Theme: graphite and porcelain surfaces, one cobalt accent, and a small set of
+   model tones used wherever a loaded model has to be told apart in memory.
+   Colors are HSL channels so Tailwind utilities can apply alpha. */
 @layer base {
   :root {
-    --background: 240 30% 4%;
-    --foreground: 240 100% 97%;
-    --card: 240 40% 11%;
-    --card-foreground: 240 100% 97%;
-    --muted: 240 30% 15%;
-    --muted-foreground: 240 25% 64%;
-    --accent: 184 100% 50%; /* neon cyan */
-    --accent-foreground: 240 60% 5%;
-    --destructive: 351 100% 56%; /* neon red */
+    color-scheme: light;
+    --background: 220 14% 96%;
+    --sidebar: 225 12% 92.5%;
+    --card: 0 0% 100%;
+    --card-foreground: 230 10% 10%;
+    --muted: 222 14% 92%;
+    --foreground: 230 10% 10%;
+    --muted-foreground: 226 7% 40%;
+    --border: 222 14% 86%;
+    --input: 222 12% 80%;
+    --ring: 237 65% 54%;
+    --accent: 237 65% 54%;
+    --accent-foreground: 0 0% 100%;
+    --positive: 152 70% 32%;
+    --caution: 34 80% 38%;
+    --destructive: 3 68% 50%;
     --destructive-foreground: 0 0% 100%;
-    --border: 240 38% 17%;
-    --input: 240 38% 17%;
-    --ring: 184 100% 50%;
-    --sidebar: 240 42% 6%;
-    --radius: 0.25rem;
 
-    /* neon extras */
-    --neon-magenta: 327 100% 50%;
-    --grad-headline: linear-gradient(
-      100deg,
-      hsl(184 100% 55%) 0%,
-      hsl(190 100% 70%) 18%,
-      hsl(327 100% 55%) 62%,
-      hsl(51 100% 50%) 100%
-    );
+    /* Memory ledger */
+    --seg-0: 237 65% 54%;
+    --seg-1: 174 62% 33%;
+    --seg-2: 300 38% 47%;
+    --seg-3: 206 60% 42%;
+    --seg-system: 225 9% 70%;
+    --seg-reserve: 225 9% 70%;
+
+    --radius: 0.625rem;
+    --shadow-dialog: 0 24px 60px -12px hsl(230 20% 10% / 0.28), 0 0 0 1px hsl(230 20% 10% / 0.08);
+    --shadow-float: 0 1px 2px hsl(230 20% 10% / 0.06), 0 0 0 1px hsl(var(--border));
   }
 
-  /* Deeper void for explicit dark mode. */
   .dark {
-    --background: 240 35% 2.5%;
-    --foreground: 240 100% 98%;
-    --card: 240 42% 9%;
-    --card-foreground: 240 100% 98%;
-    --muted: 240 32% 14%;
-    --muted-foreground: 240 24% 66%;
-    --accent: 184 100% 52%;
-    --accent-foreground: 240 60% 4%;
-    --destructive: 351 100% 58%;
+    color-scheme: dark;
+    --background: 228 10% 9.5%;
+    --sidebar: 230 9% 12.5%;
+    --card: 228 9% 13.5%;
+    --card-foreground: 225 12% 93%;
+    --muted: 228 8% 18%;
+    --foreground: 225 12% 93%;
+    --muted-foreground: 226 8% 62%;
+    --border: 228 8% 20%;
+    --input: 228 7% 27%;
+    --ring: 236 100% 74%;
+    --accent: 236 100% 74%;
+    --accent-foreground: 237 45% 11%;
+    --positive: 150 55% 55%;
+    --caution: 38 88% 62%;
+    --destructive: 3 85% 67%;
     --destructive-foreground: 0 0% 100%;
-    --border: 240 40% 18%;
-    --input: 240 40% 18%;
-    --ring: 184 100% 52%;
-    --sidebar: 240 45% 4%;
+
+    --seg-0: 236 100% 74%;
+    --seg-1: 172 55% 50%;
+    --seg-2: 300 50% 72%;
+    --seg-3: 205 78% 63%;
+    --seg-system: 226 7% 40%;
+    --seg-reserve: 226 7% 40%;
+
+    --shadow-dialog: 0 24px 60px -12px hsl(0 0% 0% / 0.6), 0 0 0 1px hsl(0 0% 100% / 0.07);
+    --shadow-float: 0 0 0 1px hsl(var(--border));
   }
 
   * {
     @apply border-border;
   }
 
+  html {
+    font-size: 13px;
+  }
+
   body {
-    @apply bg-background text-foreground antialiased;
-    font-family: "Exo 2", system-ui, sans-serif;
-    -webkit-font-smoothing: antialiased;
+    @apply bg-background font-sans text-foreground antialiased;
+    font-feature-settings: "cv11", "ss01";
+    line-height: 1.45;
     overscroll-behavior: none;
-    /* subtle cyan top-glow + faint tech grid */
-    background-image:
-      radial-gradient(ellipse 80% 55% at 50% -12%, hsl(184 100% 50% / 0.08), transparent 70%),
-      linear-gradient(hsl(240 50% 60% / 0.035) 1px, transparent 1px),
-      linear-gradient(90deg, hsl(240 50% 60% / 0.035) 1px, transparent 1px);
-    background-size: 100% 100%, 38px 38px, 38px 38px;
-    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+    /* Desktop app: text selection only where there is text worth copying. */
+    -webkit-user-select: none;
+    user-select: none;
   }
 
-  /* Display headings: Orbitron + neon gradient. */
-  h1 {
-    font-family: "Orbitron", system-ui, sans-serif;
-    letter-spacing: 0.01em;
-    background: var(--grad-headline);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+  input,
+  textarea,
+  pre,
+  code,
+  .selectable {
+    -webkit-user-select: text;
+    user-select: text;
   }
 
+  h1,
   h2,
   h3 {
-    font-family: "Orbitron", system-ui, sans-serif;
-    letter-spacing: 0.01em;
+    letter-spacing: -0.012em;
+    text-wrap: balance;
+  }
+
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+    border-radius: 4px;
   }
 
   ::selection {
-    background: hsl(var(--accent));
-    color: hsl(var(--background));
+    background: hsl(var(--accent) / 0.28);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background: hsl(var(--muted-foreground) / 0.28) padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5) padding-box;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -97,6 +138,7 @@
     *::before,
     *::after {
       animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
       transition-duration: 0.001ms !important;
     }
   }
@@ -106,36 +148,32 @@
   .no-drag {
     -webkit-app-region: no-drag;
   }
-  /* Neon gradient text helper. */
-  .text-gradient {
-    background: var(--grad-headline);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
-  .glow-accent {
-    box-shadow:
-      0 0 8px hsl(var(--accent) / 0.6),
-      0 0 20px hsl(var(--accent) / 0.3);
-  }
-  .text-glow {
-    text-shadow: 0 0 10px hsl(var(--accent) / 0.6);
+
+  /* Condensed tabular figures: the memory and speed readouts. */
+  .figure {
+    font-stretch: 78%;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
   }
 
-  /* Neon scrollbar. */
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+  .tabular {
+    font-variant-numeric: tabular-nums;
   }
-  ::-webkit-scrollbar-track {
-    background: transparent;
+
+  /* Diagonal hatch, for memory that is spoken for but not by a model. */
+  .bg-hatch {
+    background-image: repeating-linear-gradient(
+      -45deg,
+      hsl(var(--seg-reserve) / 0.55) 0 1px,
+      transparent 1px 5px
+    );
   }
-  ::-webkit-scrollbar-thumb {
-    background: hsl(var(--accent) / 0.5);
-    border-radius: 2px;
+
+  .shadow-dialog {
+    box-shadow: var(--shadow-dialog);
   }
-  ::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--accent) / 0.8);
-    box-shadow: 0 0 8px hsl(var(--accent) / 0.6);
+
+  .shadow-float {
+    box-shadow: var(--shadow-float);
   }
 }

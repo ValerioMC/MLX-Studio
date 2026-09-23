@@ -136,7 +136,7 @@ mlx-studio/
 │  │  ├─ layout/                 # Sidebar, TitleBar, AppShell
 │  │  ├─ models/                 # ModelCard, ModelStatusBadge, RamMeter
 │  │  ├─ chat/                   # MessageList, Composer, Markdown
-│  │  └─ system/                 # MemoryGauge, ActivityFeed
+│  │  └─ system/                 # MemoryLedger, ConnectionBanner
 │  ├─ lib/
 │  │  ├─ api/                    # typed client for FastAPI (openapi-gen)
 │  │  ├─ tauri/                  # invoke wrappers + event listeners
@@ -144,7 +144,7 @@ mlx-studio/
 │  │  ├─ format.ts               # bytes, tokens/s, durations
 │  │  └─ query.ts                # TanStack Query setup
 │  ├─ stores/                    # Zustand stores (ui, chat draft, settings)
-│  ├─ hooks/                     # useModels, useDownloads, useSystemStats…
+│  ├─ hooks/                     # useMemoryLedger, useIsDark
 │  ├─ types/                     # shared TS types (generated + hand)
 │  └─ styles/
 │     ├─ globals.css             # tailwind layers + CSS vars (themes)
@@ -330,20 +330,15 @@ CREATE INDEX idx_activity_created     ON activity_log(created_at DESC);
       └─ <AppShell>
          ├─ <TitleBar/>             # custom draggable region, traffic-light inset
          ├─ <Sidebar>              # primary nav, vibrancy background
-         │  ├─ <NavItem> Dashboard
-         │  ├─ <NavItem> Catalog
-         │  ├─ <NavItem> Downloads  (badge: active count)
-         │  ├─ <NavItem> Models
-         │  ├─ <NavItem> Chat
-         │  ├─ <SidebarSpacer/>
-         │  ├─ <RunningModelsMini/> # live status, click to stop
-         │  └─ <NavItem> Settings
+         │  ├─ <NavItem> Overview ⌘1, Chat ⌘2, Models ⌘3, Catalog ⌘4, Downloads ⌘5 (badge: active count)
+         │  ├─ <RunningModels/>     # live status + context; click opens chat with it
+         │  ├─ <LedgerBar compact/> # unified memory at a glance
+         │  └─ <NavItem> Settings ⌘,
          └─ <Routes>
-            ├─ <DashboardView>
-            │  ├─ <StatCard> Installed  <StatCard> Running
-            │  ├─ <MemoryGauge/>        # unified-memory donut, model breakdown
-            │  ├─ <RunningModelsList/>
-            │  └─ <ActivityFeed/>
+            ├─ <DashboardView>          # "Overview"
+            │  ├─ <FreeForModels/> <LedgerBar/> <LedgerLegend/>  # memory by model, system, reserve, free
+            │  ├─ running models (Chat / Use from code / Stop) or quick start
+            │  └─ activity
             ├─ <CatalogView>
             │  ├─ <SearchBar/>          # ⌘F
             │  ├─ <FilterPanel>        # params, quant, ctx, vision, instruct
@@ -374,7 +369,7 @@ CREATE INDEX idx_activity_created     ON activity_log(created_at DESC);
                └─ <SettingsSection> Performance (max RAM, default ctx, kv-cache)
 ```
 
-**State strategy:** TanStack Query owns all server state (models, downloads, system stats) with smart polling/SSE invalidation. Zustand holds ephemeral UI state (active route, chat draft, open dialogs). No Redux. Generated TS types from the FastAPI OpenAPI schema keep the client honest.
+**State strategy:** TanStack Query owns request/response server state (models, conversations, activity, catalog). What the sidecar pushes over SSE (system stats, download progress) lives in one Zustand store (`stores/live.ts`) fed by a single subscription per stream, opened by the shell and reconnecting with backoff. Zustand also holds the chat thread (so a generation survives navigation) and persisted preferences (theme, chat defaults). No Redux.
 
 ---
 

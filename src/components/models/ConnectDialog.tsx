@@ -1,99 +1,27 @@
 import { useState } from "react";
 import { baseUrl, getConfig } from "@/lib/api/client";
-import { Badge, Button, Card } from "@/components/ui/primitives";
+import { Dialog } from "@/components/ui/Dialog";
+import { CopyButton } from "@/components/ui/controls";
+import { cn } from "@/lib/utils";
 import type { Model } from "@/types";
-import { Check, Copy, X } from "lucide-react";
-
-type SnippetLang = "openai" | "langchain" | "java" | "rust" | "curl";
-
-const TABS: { id: SnippetLang; label: string }[] = [
-  { id: "openai", label: "Python (OpenAI SDK)" },
-  { id: "langchain", label: "LangChain" },
-  { id: "java", label: "Java (LangChain4j)" },
-  { id: "rust", label: "Rust (Rig)" },
-  { id: "curl", label: "curl" },
-];
+import { buildSnippet, SNIPPET_TABS, type SnippetLang } from "./snippets";
 
 const TAB_STORAGE_KEY = "mlxstudio.connect.tab";
 
 function initialTab(): SnippetLang {
-  const saved = localStorage.getItem(TAB_STORAGE_KEY);
-  return TABS.some((t) => t.id === saved) ? (saved as SnippetLang) : "openai";
+  try {
+    const saved = localStorage.getItem(TAB_STORAGE_KEY);
+    return SNIPPET_TABS.find((t) => t.id === saved)?.id ?? "openai";
+  } catch {
+    return "openai";
+  }
 }
 
-function buildSnippet(lang: SnippetLang, apiBase: string, apiKey: string, modelId: string): string {
-  switch (lang) {
-    case "openai":
-      return `# pip install openai
-from openai import OpenAI
-
-client = OpenAI(
-    base_url="${apiBase}",
-    api_key="${apiKey}",
-)
-
-response = client.chat.completions.create(
-    model="${modelId}",
-    messages=[
-        {"role": "user", "content": "Hello! Introduce yourself in one sentence."},
-    ],
-)
-print(response.choices[0].message.content)`;
-    case "langchain":
-      return `# pip install langchain-openai
-from langchain_openai import ChatOpenAI
-
-llm = ChatOpenAI(
-    base_url="${apiBase}",
-    api_key="${apiKey}",
-    model="${modelId}",
-)
-
-response = llm.invoke("Hello! Introduce yourself in one sentence.")
-print(response.content)`;
-    case "java":
-      return `// Maven: dev.langchain4j:langchain4j-open-ai
-// Spring Boot: dev.langchain4j:langchain4j-open-ai-spring-boot-starter
-// and in application.properties:
-//   langchain4j.open-ai.chat-model.base-url=${apiBase}
-//   langchain4j.open-ai.chat-model.api-key=${apiKey}
-//   langchain4j.open-ai.chat-model.model-name=${modelId}
-// then inject ChatModel where you need it. Plain Java:
-
-import dev.langchain4j.model.openai.OpenAiChatModel;
-
-OpenAiChatModel model = OpenAiChatModel.builder()
-        .baseUrl("${apiBase}")
-        .apiKey("${apiKey}")
-        .modelName("${modelId}")
-        .build();
-
-String reply = model.chat("Hello! Introduce yourself in one sentence.");
-System.out.println(reply);`;
-    case "rust":
-      return `// cargo add rig-core tokio --features tokio/macros
-use rig::prelude::*;
-use rig::providers::openai;
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = openai::Client::from_url("${apiKey}", "${apiBase}");
-    let agent = client.agent("${modelId}").build();
-
-    let reply = agent
-        .prompt("Hello! Introduce yourself in one sentence.")
-        .await?;
-    println!("{reply}");
-    Ok(())
-}`;
-    case "curl":
-      return `curl ${apiBase}/chat/completions \\
-  -H "Authorization: Bearer ${apiKey}" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "model": "${modelId}",
-    "messages": [{"role": "user", "content": "Hello!"}]
-  }'`;
+function rememberTab(tab: SnippetLang): void {
+  try {
+    localStorage.setItem(TAB_STORAGE_KEY, tab);
+  } catch {
+    // Storage unavailable: the choice just isn't remembered.
   }
 }
 
@@ -101,116 +29,66 @@ export function ConnectDialog({ model, onClose }: { model: Model; onClose: () =>
   // Remember the last language across dialogs: whoever integrates with
   // LangChain wants the LangChain tab every time.
   const [tab, setTab] = useState<SnippetLang>(initialTab);
-  const selectTab = (t: SnippetLang) => {
-    setTab(t);
-    localStorage.setItem(TAB_STORAGE_KEY, t);
-  };
   const cfg = getConfig();
   const apiBase = `${baseUrl()}/v1`;
   const snippet = buildSnippet(tab, apiBase, cfg.apiKey, model.id);
   const running = model.status === "running";
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <Card
-        className="w-[38rem] max-w-[92vw] space-y-4 shadow-glow"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="flex items-center gap-2 text-base font-semibold">
-              Connect to {model.display_name}
-              {running ? <Badge tone="green">running</Badge> : <Badge>installed</Badge>}
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              OpenAI-compatible API on localhost.
-              {!running && " The model loads automatically on the first request."}
-            </p>
-          </div>
-          <Button variant="ghost" size="icon" onClick={onClose}>
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-
-        <div className="space-y-1.5 rounded-md border border-border bg-muted/40 p-3 text-sm">
-          <InfoRow label="Base URL" value={apiBase} />
-          <InfoRow label="API key" value={cfg.apiKey} />
-          <InfoRow label="Model" value={model.id} />
-        </div>
-
-        <div>
-          <div className="flex gap-1 border-b border-border">
-            {TABS.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => selectTab(t.id)}
-                className={
-                  "-mb-px border-b-2 px-3 py-1.5 text-sm transition-colors " +
-                  (tab === t.id
-                    ? "border-accent font-medium text-accent"
-                    : "border-transparent text-muted-foreground hover:text-foreground")
-                }
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-          <CodeBlock code={snippet} />
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="flex min-w-0 items-center gap-1.5">
-        <span className="truncate font-mono text-xs">{value}</span>
-        <CopyButton text={value} />
-      </span>
-    </div>
-  );
-}
-
-function CodeBlock({ code }: { code: string }) {
-  return (
-    <div className="relative mt-3">
-      <pre className="max-h-72 overflow-auto rounded-md border border-border bg-muted/40 p-3 font-mono text-xs leading-relaxed">
-        {code}
-      </pre>
-      <div className="absolute right-2 top-2">
-        <CopyButton text={code} bordered />
-      </div>
-    </div>
-  );
-}
-
-function CopyButton({ text, bordered = false }: { text: string; bordered?: boolean }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
-    } catch {
-      /* clipboard unavailable */
-    }
+  const selectTab = (next: SnippetLang) => {
+    setTab(next);
+    rememberTab(next);
   };
+
   return (
-    <button
-      onClick={copy}
-      title="Copy"
-      className={
-        "shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground " +
-        (bordered ? "border border-border bg-card" : "")
+    <Dialog
+      title={`Use ${model.display_name} from code`}
+      description={
+        running
+          ? "It is running and answers on an OpenAI-compatible API on this Mac."
+          : "It answers on an OpenAI-compatible API on this Mac, and loads on the first request."
       }
+      onClose={onClose}
+      className="w-[42rem]"
     >
-      {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
-    </button>
+      <dl className="mb-4 grid grid-cols-[auto_1fr_auto] items-center gap-x-4 gap-y-1 rounded-lg bg-muted/60 px-3 py-2 text-sm">
+        {[
+          ["Base URL", apiBase],
+          ["API key", cfg.apiKey],
+          ["Model", model.id],
+        ].map(([label, value]) => (
+          <div key={label} className="contents">
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className="selectable truncate font-mono text-xs">{value}</dd>
+            <CopyButton text={value ?? ""} label={`Copy ${label?.toLowerCase()}`} />
+          </div>
+        ))}
+      </dl>
+
+      <div role="tablist" aria-label="Language" className="flex gap-4 border-b">
+        {SNIPPET_TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.id}
+            onClick={() => selectTab(t.id)}
+            className={cn(
+              "-mb-px border-b-2 pb-2 pt-1 text-sm font-medium transition-colors",
+              tab === t.id
+                ? "border-accent text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div role="tabpanel" className="relative mt-3">
+        <pre className="max-h-[18rem] overflow-auto rounded-lg bg-muted/60 p-3.5 font-mono text-xs leading-relaxed">
+          {snippet}
+        </pre>
+        <CopyButton text={snippet} label="Copy code" showLabel className="absolute right-2 top-2 bg-card shadow-float" />
+      </div>
+    </Dialog>
   );
 }

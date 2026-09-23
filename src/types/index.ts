@@ -1,3 +1,6 @@
+export type ModelStatus = "available" | "downloading" | "installed" | "running" | "error";
+export type Fit = "fits" | "tight" | "too_big" | "unknown";
+
 export interface Model {
   id: string;
   hf_repo_id: string;
@@ -10,19 +13,37 @@ export interface Model {
   download_bytes?: number | null;
   est_ram_bytes?: number | null;
   description?: string | null;
-  status: "available" | "downloading" | "installed" | "running" | "error";
-  fit?: "fits" | "tight" | "too_big" | "unknown" | null;
+  status: ModelStatus;
+  fit?: Fit | null;
   chat_capable?: boolean;
 }
+
+/** A catalog search result: a model on the Hub, with popularity figures. */
+export interface CatalogModel extends Model {
+  downloads_30d?: number | null;
+  likes?: number | null;
+  last_modified?: string | null;
+}
+
+export type CatalogSort = "downloads" | "likes" | "recent";
+
+export type DownloadStatus = "queued" | "downloading" | "paused" | "completed" | "failed" | "canceled";
 
 export interface DownloadJob {
   id: string;
   hf_repo_id: string;
-  status: "queued" | "downloading" | "paused" | "completed" | "failed" | "canceled";
+  status: DownloadStatus;
   total_bytes?: number | null;
   downloaded_bytes: number;
   speed_bps?: number | null;
   error?: string | null;
+}
+
+export interface LoadedModel {
+  model_id: string;
+  context_length: number;
+  est_ram_bytes?: number | null;
+  loaded_at?: number;
 }
 
 export interface SystemStats {
@@ -32,7 +53,8 @@ export interface SystemStats {
   swap_used: number;
   cpu_percent: number;
   disk_free: number;
-  loaded_models: { model_id: string; context_length: number }[];
+  reserve_bytes?: number;
+  loaded_models: LoadedModel[];
 }
 
 export interface Activity {
@@ -47,4 +69,16 @@ export interface Conversation {
   title: string | null;
   model_id: string | null;
   updated_at: string;
+}
+
+export interface MemoryEstimate {
+  context_length: number;
+  est_ram_bytes: number | null;
+  weight_bytes?: number;
+  kv_cache_bytes?: number;
+  overhead_bytes?: number;
+  fit: Fit;
+  budget_bytes: number;
+  total_usable_bytes: number;
+  max_context?: number | null;
 }

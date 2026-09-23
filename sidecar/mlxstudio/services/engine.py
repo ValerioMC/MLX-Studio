@@ -23,6 +23,8 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import estimator
+
 logger = logging.getLogger(__name__)
 
 try:  # MLX is only present on Apple Silicon
@@ -56,6 +58,9 @@ class Runner:
     processor: object | None = None
     config: dict | None = None
     enable_thinking: bool = True
+    # Estimated resident footprint (weights + KV cache at context_length +
+    # overhead), so the UI can show how unified memory is split between models.
+    est_ram_bytes: int | None = None
     loaded_at: float = field(default_factory=time.time)
 
 
@@ -256,7 +261,14 @@ class Engine:
         with self._lock:
             if model_id in self._runners:
                 return self._runners[model_id]
-            runner = Runner(model_id, local_path, context_length, enable_thinking=enable_thinking)
+            breakdown = estimator.installed_breakdown(local_path, None, None, context_length)
+            runner = Runner(
+                model_id,
+                local_path,
+                context_length,
+                enable_thinking=enable_thinking,
+                est_ram_bytes=breakdown["est_ram_bytes"] if breakdown else None,
+            )
             if MLX_AVAILABLE:
                 if is_vision_model(local_path):
                     if not MLX_VLM_AVAILABLE:
@@ -299,7 +311,12 @@ class Engine:
 
     def loaded(self) -> list[dict]:
         return [
-            {"model_id": r.model_id, "context_length": r.context_length, "loaded_at": r.loaded_at}
+            {
+                "model_id": r.model_id,
+                "context_length": r.context_length,
+                "est_ram_bytes": r.est_ram_bytes,
+                "loaded_at": r.loaded_at,
+            }
             for r in self._runners.values()
         ]
 

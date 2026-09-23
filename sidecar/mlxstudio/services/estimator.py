@@ -3,23 +3,34 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
-# Bytes per parameter by quantization (weights only).
+# Bytes per parameter for the non-integer formats (weights only); "<n>bit"
+# quantizations are n/8. MX/NV FP4 carry a shared scale per block of 32/16.
 _BYTES_PER_PARAM = {
-    "4bit": 0.5,
-    "8bit": 1.0,
     "bf16": 2.0,
     "fp16": 2.0,
     "fp32": 4.0,
+    "mxfp4": 0.53,
+    "nvfp4": 0.56,
 }
+
+_NBIT_RE = re.compile(r"^(\d+)bit$")
+
+
+def bytes_per_param(quant: str | None) -> float:
+    """Unknown or missing quantization is assumed to be bf16, the usual unquantized format."""
+    key = (quant or "bf16").lower()
+    if match := _NBIT_RE.match(key):
+        return int(match.group(1)) / 8
+    return _BYTES_PER_PARAM.get(key, 2.0)
 
 
 def weight_bytes(params_b: float | None, quant: str | None) -> int | None:
     if params_b is None:
         return None
-    per = _BYTES_PER_PARAM.get((quant or "bf16").lower(), 2.0)
-    return int(params_b * 1e9 * per)
+    return int(params_b * 1e9 * bytes_per_param(quant))
 
 
 def kv_cache_bytes(config: dict, ctx: int) -> int:

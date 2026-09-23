@@ -31,7 +31,7 @@ xattr -dr com.apple.quarantine "/Applications/MLX Studio.app"
 |---|---|
 | Desktop shell | Tauri 2 (Rust) |
 | Frontend | React 18 + TypeScript + Vite |
-| UI | TailwindCSS, shadcn-style primitives, lucide icons |
+| UI | TailwindCSS on CSS-variable tokens (light + dark), Instrument Sans and JetBrains Mono bundled with the app, lucide icons |
 | Backend (sidecar) | Python + FastAPI |
 | AI engine | `mlx-lm` (text) + `mlx-vlm` (vision) |
 | DB | SQLite (SQLAlchemy) |
@@ -121,17 +121,19 @@ for chunk in resp:
     print(chunk.choices[0].delta.content or "", end="")
 ```
 
-Find the API key under **Settings ▸ API**.
+Find the API key under **Settings ▸ Local API**.
 
 ## Features
 
-- **Dashboard**: installed/running models, live memory gauge, recent activity
-- **Catalog**: search `mlx-community` models, filter by params/quant/vision/instruct, memory-fit badge (Fits / Tight / Too big / Unknown), model card dialog (README, license, downloads)
-- **Downloads**: resumable downloads with live speed + progress (SSE); pause/cancel take effect at the next file boundary
-- **Models**: start, stop, delete, update; memory estimate before load; per-model Connect dialog with code snippets (Python OpenAI SDK, LangChain, Java LangChain4j, Rust Rig, curl); non-chat repos (ASR, embeddings) are flagged and not startable
-- **Chat**: streaming responses, Markdown + code highlighting, persisted conversation history, tokens/sec per reply; image attachments (file picker or paste) when the running model supports vision
+- **Memory ledger**: one bar for the Mac's unified memory, split into each loaded model, macOS and apps, the 15% safety reserve and what is free for models. Large on Overview, compact in the sidebar, and a preview of where a model will land in the start dialog
+- **Overview**: free memory for models, running models (chat, use from code, stop), quick start for installed models, swap warning, recent activity
+- **Catalog**: debounced search of `mlx-community`, filters (4/8-bit, vision, instruct, fits this Mac), sort by downloads, likes or recency, a memory meter per model against this Mac's usable memory, download state per row (downloading, paused, retry, installed), model card dialog
+- **Downloads**: resumable downloads with live speed, progress and time left (SSE); pause/cancel take effect at the next file boundary; failed jobs retry in place; finished jobs can be cleared without touching the installed model
+- **Models**: start (context length and reasoning, with a live memory breakdown), stop, delete (confirmed), update; "Use from code" dialog with snippets (Python OpenAI SDK, LangChain, Java LangChain4j, Rust Rig, curl); non-chat repos (ASR, embeddings) are flagged and not startable
+- **Chat**: streaming responses batched per frame, Markdown with highlighted, copyable code; collapsible reasoning ("Thought for 4 s") for Qwen3/DeepSeek-R1 style models; copy, regenerate, tokens/sec and time to first token per reply; notice when a reply hits the token limit; conversations grouped by date, renamable, persisted; system prompt, temperature and reply length remembered across launches; image attachments (picker, paste or drop) on vision models
 - **Vision models**: repos with a vision tower (Qwen-VL, LLaVA, ...) load through `mlx-vlm`; the `/v1` API accepts OpenAI-style `image_url` content parts (base64 data URLs or http URLs)
-- **Settings**: models directory, API base URL/key, theme, optional Hugging Face token (raises download rate limits)
+- **Settings**: theme (system, light, dark, remembered), chat defaults, API base URL/key, optional Hugging Face token, models directory, how memory fit is decided
+- **Keyboard**: ⌘1–⌘5 switch pages, ⌘, opens Settings, ⌘N starts a new chat, ⌘F searches the catalog, Esc closes dialogs
 - **OpenAI-compatible `/v1` API**: for `curl`, the OpenAI SDK, LangChain, Continue, Cursor, etc.; supports tool/function calling (agentic clients) on models with a parseable tool format
 
 ## Process lifecycle
@@ -150,7 +152,9 @@ The sidecar can never outlive the app:
 ```bash
 cd sidecar
 uv run --extra dev pytest tests      # sidecar unit + API tests
-pnpm exec tsc --noEmit               # frontend typecheck
+cd ..
+pnpm test                            # frontend unit tests (vitest)
+pnpm typecheck                       # frontend typecheck
 ```
 
 ## License

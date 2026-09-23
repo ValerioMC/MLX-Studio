@@ -97,6 +97,18 @@ def append_messages(conv_id: str, body: MessagesIn, db: Session = Depends(get_db
     return _conversation_out(conv)
 
 
+@router.put("/{conv_id}/messages")
+def replace_messages(conv_id: str, body: MessagesIn, db: Session = Depends(get_db)):
+    """Replace the whole thread, for edits that rewrite history (regenerating
+    the last answer). The title is kept once set."""
+    conv = db.get(Conversation, conv_id)
+    if not conv:
+        raise HTTPException(404, "Conversation not found")
+    conv.messages.clear()
+    db.flush()
+    return append_messages(conv_id, body, db)
+
+
 @router.patch("/{conv_id}")
 def rename_conversation(conv_id: str, patch: ConversationPatch, db: Session = Depends(get_db)):
     conv = db.get(Conversation, conv_id)

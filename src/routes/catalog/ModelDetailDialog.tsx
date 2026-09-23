@@ -1,9 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
+import { ExternalLink, Heart } from "lucide-react";
 import { api } from "@/lib/api/client";
-import { Badge, Button, Card } from "@/components/ui/primitives";
+import { bytes, compactNumber } from "@/lib/format";
 import { Markdown } from "@/components/chat/Markdown";
-import type { Model } from "@/types";
-import { Download, Heart, X } from "lucide-react";
+import { openExternal } from "@/lib/openExternal";
+import { ModelFacts } from "@/components/models/ModelFacts";
+import { Dialog } from "@/components/ui/Dialog";
+import { Tag } from "@/components/ui/primitives";
+import { DownloadButton } from "./DownloadButton";
+import type { CatalogModel } from "@/types";
 
 interface RepoDetail {
   hf_repo_id: string;
@@ -13,15 +18,12 @@ interface RepoDetail {
   readme: string | null;
 }
 
-export function ModelDetailDialog({
-  model,
-  onClose,
-  onDownload,
-}: {
-  model: Model;
-  onClose: () => void;
-  onDownload: (repoId: string) => void;
-}) {
+/** Strips the YAML front matter model cards start with. */
+function cardBody(readme: string): string {
+  return readme.replace(/^---\n[\s\S]*?\n---\n/, "").trim();
+}
+
+export function ModelDetailDialog({ model, onClose }: { model: CatalogModel; onClose: () => void }) {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["catalog-detail", model.hf_repo_id],
     queryFn: () => api<RepoDetail>(`/catalog/detail?repo_id=${encodeURIComponent(model.hf_repo_id)}`),
@@ -29,58 +31,54 @@ export function ModelDetailDialog({
   });
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm"
-      onClick={onClose}
+    <Dialog
+      title={model.display_name}
+      description={<span className="selectable font-mono text-xs">{model.hf_repo_id}</span>}
+      onClose={onClose}
+      className="h-[80vh] w-[48rem]"
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={() => void openExternal(`https://huggingface.co/${model.hf_repo_id}`)}
+            className="mr-auto inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            Open on Hugging Face
+          </button>
+          <DownloadButton repoId={model.hf_repo_id} />
+        </>
+      }
     >
-      <Card
-        className="flex max-h-[85vh] w-[44rem] max-w-[92vw] flex-col space-y-3 shadow-glow"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-base font-semibold">{model.display_name}</h2>
-            <p className="text-xs text-muted-foreground">{model.hf_repo_id}</p>
-          </div>
-          <div className="flex items-center gap-1">
-            <Button
-              size="sm"
-              onClick={() => {
-                onDownload(model.hf_repo_id);
-                onClose();
-              }}
-            >
-              <Download className="h-4 w-4" /> Download
-            </Button>
-            <Button variant="ghost" size="icon" onClick={onClose}>
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 pb-4 text-sm text-muted-foreground">
+        <ModelFacts model={model} />
+        <span className="tabular">Needs about {bytes(model.est_ram_bytes)}</span>
+        {data && <span className="tabular">{compactNumber(data.downloads)} downloads</span>}
+        {data && (
+          <span className="tabular inline-flex items-center gap-1">
+            <Heart className="h-3 w-3" aria-hidden />
+            {compactNumber(data.likes)}
+          </span>
+        )}
+        {data?.license && <Tag>License: {data.license}</Tag>}
+      </div>
 
-        <div className="flex flex-wrap gap-1.5">
-          {data?.license && <Badge tone="accent">license: {data.license}</Badge>}
-          {data != null && <Badge>{data.downloads.toLocaleString()} downloads</Badge>}
-          {data != null && (
-            <Badge>
-              <Heart className="mr-1 h-3 w-3" />
-              {data.likes.toLocaleString()}
-            </Badge>
-          )}
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border bg-muted/30 p-4">
-          {isLoading && <p className="text-sm text-muted-foreground">Loading model card…</p>}
-          {isError && (
-            <p className="text-sm text-muted-foreground">
-              Could not load the model card from Hugging Face.
-            </p>
-          )}
-          {data && (data.readme ? <Markdown content={data.readme} /> : (
-            <p className="text-sm text-muted-foreground">This model has no README.</p>
+      <div className="selectable border-t pt-4">
+        {isLoading && (
+          <div className="space-y-2" aria-busy>
+            {[88, 72, 94, 60].map((w) => (
+              <div key={w} className="h-3 animate-pulse rounded bg-muted" style={{ width: `${w}%` }} />
+            ))}
+          </div>
+        )}
+        {isError && <p className="text-sm text-muted-foreground">Could not load the model card from Hugging Face.</p>}
+        {data &&
+          (data.readme ? (
+            <Markdown content={cardBody(data.readme)} />
+          ) : (
+            <p className="text-sm text-muted-foreground">This model has no model card.</p>
           ))}
-        </div>
-      </Card>
-    </div>
+      </div>
+    </Dialog>
   );
 }

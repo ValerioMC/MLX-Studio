@@ -1,304 +1,190 @@
-import { useEffect, useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api/client";
-import { Badge, Button, Card } from "@/components/ui/primitives";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Code2, MessageSquare, Play, RefreshCw, Square, Trash2 } from "lucide-react";
+import { useModels } from "@/lib/api/queries";
+import { jobForRepo, useLive } from "@/stores/live";
+import { useChat } from "@/stores/chat";
+import { StartModelDialog } from "@/components/models/StartModelDialog";
 import { ConnectDialog } from "@/components/models/ConnectDialog";
-import { bytes, params } from "@/lib/format";
+import { ModelFacts } from "@/components/models/ModelFacts";
+import { useModelAction } from "@/components/models/useModelActions";
+import { ConfirmDialog } from "@/components/ui/Dialog";
+import { Button, EmptyState, InlineError, PageHeader, StatusDot, Tag } from "@/components/ui/primitives";
+import { bytes, percent } from "@/lib/format";
 import type { Model } from "@/types";
-import { Play, Square, Trash2, RefreshCw, Loader2, Code2 } from "lucide-react";
 
-interface Estimate {
-  context_length: number;
-  est_ram_bytes: number | null;
-  weight_bytes?: number;
-  kv_cache_bytes?: number;
-  overhead_bytes?: number;
-  fit: "fits" | "tight" | "too_big" | "unknown";
-  budget_bytes: number;
-  total_usable_bytes: number;
-  max_context?: number | null;
+function byStatusThenName(a: Model, b: Model): number {
+  const running = Number(b.status === "running") - Number(a.status === "running");
+  return running || a.display_name.localeCompare(b.display_name);
 }
 
 export function ModelsView() {
-  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const { data: models, isLoading } = useModels();
+  const downloads = useLive((s) => s.downloads);
+  const setChatModel = useChat((s) => s.setModel);
+  const stop = useModelAction("stop");
+  const update = useModelAction("update");
+  const remove = useModelAction("delete");
   const [startTarget, setStartTarget] = useState<Model | null>(null);
   const [connectTarget, setConnectTarget] = useState<Model | null>(null);
-  const { data: models } = useQuery({
-    queryKey: ["models"],
-    queryFn: () => api<Model[]>("/models"),
-    refetchInterval: 3000,
-  });
+  const [deleteTarget, setDeleteTarget] = useState<Model | null>(null);
 
-  const action = useMutation({
-    mutationFn: ({ id, verb, body }: { id: string; verb: string; body?: object }) =>
-      verb === "delete"
-        ? api(`/models/${id}`, { method: "DELETE" })
-        : api(`/models/${id}/${verb}`, { method: "POST", body: JSON.stringify(body ?? {}) }),
-    onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["models"] });
-      // The moment a model comes up is when "how do I call it from my code?"
-      // gets asked; answer it right away with the connection snippets.
-      if (vars.verb === "start" && startTarget) {
-        setConnectTarget({ ...startTarget, status: "running" });
-      }
-    },
-    onSettled: () => setStartTarget(null),
-  });
+  const sorted = [...(models ?? [])].sort(byStatusThenName);
+  const totalOnDisk = sorted.reduce((sum, m) => sum + (m.download_bytes ?? 0), 0);
+  const actionError = stop.error ?? update.error;
+
+  const openChat = (model: Model) => {
+    setChatModel(model.id);
+    navigate("/chat");
+  };
 
   return (
-    <div className="animate-fade-in space-y-5 pt-2">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Models</h1>
-        <p className="text-sm text-muted-foreground">Manage installed models.</p>
-      </header>
+    <div>
+      <PageHeader title="Models">
+        {sorted.length > 0 && (
+          <span className="text-sm text-muted-foreground">
+            {sorted.length} installed, <span className="tabular">{bytes(totalOnDisk)}</span> on disk
+          </span>
+        )}
+      </PageHeader>
 
-      {action.isError && (
-        <Card className="border-destructive/40 text-sm text-destructive">
-          {(action.error as Error)?.message || "Action failed."}
-        </Card>
+      {actionError && <InlineError className="mb-4">{actionError.message}</InlineError>}
+
+      {!isLoading && sorted.length === 0 && (
+        <EmptyState
+          title="No models installed"
+          action={<Button onClick={() => navigate("/catalog")}>Browse the catalog</Button>}
+        >
+          Models you download from the catalog land here, ready to start.
+        </EmptyState>
       )}
 
-      {!models?.length ? (
-        <Card className="text-sm text-muted-foreground">
-          No models installed yet. Visit the Catalog to download one.
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {models.map((m) => {
+      {sorted.length > 0 && (
+        <ul className="divide-y border-y">
+          {sorted.map((m) => {
             const running = m.status === "running";
             const chatCapable = m.chat_capable !== false;
+            const job = jobForRepo(downloads, m.hf_repo_id);
+            const updating = job && job.status !== "failed";
+            const stopping = stop.isPending && stop.variables === m.id;
             return (
-              <Card key={m.id} className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{m.display_name}</span>
-                      {running ? <Badge tone="green">running</Badge> : <Badge>installed</Badge>}
-                      {!chatCapable && (
-                        <Badge tone="amber" title="Not a text-generation model; chat can't use it">
-                          not chat-capable
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="flex gap-1.5">
-                      <Badge>{params(m.params_b)}</Badge>
-                      {m.quantization && <Badge>{m.quantization}</Badge>}
-                      <Badge>{bytes(m.download_bytes)}</Badge>
-                    </div>
+              <li key={m.id} className="flex items-center gap-4 py-3.5">
+                <StatusDot tone={running ? "positive" : "idle"} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-md font-medium">{m.display_name}</p>
+                    {!chatCapable && (
+                      <Tag tone="caution" title="Not a text-generation model, so chat and the API can't use it">
+                        Not a chat model
+                      </Tag>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-sm text-muted-foreground">
+                    <span className="selectable truncate font-mono text-xs">{m.hf_repo_id}</span>
+                    <ModelFacts model={m} />
+                    <span className="tabular">{bytes(m.download_bytes)}</span>
+                    {updating && (
+                      <span className="tabular text-accent">
+                        Updating {percent(job.downloaded_bytes, job.total_bytes || 1)}%
+                      </span>
+                    )}
                   </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  {chatCapable &&
-                    (running ? (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        disabled={action.isPending}
-                        onClick={() => action.mutate({ id: m.id, verb: "stop" })}
-                      >
-                        <Square className="h-4 w-4" /> Stop
+
+                <div className="flex items-center gap-1.5">
+                  {chatCapable && running && (
+                    <>
+                      <Button size="sm" onClick={() => openChat(m)}>
+                        <MessageSquare />
+                        Chat
                       </Button>
-                    ) : (
-                      <Button size="sm" disabled={action.isPending} onClick={() => setStartTarget(m)}>
-                        <Play className="h-4 w-4" /> Start
+                      <Button variant="secondary" size="sm" loading={stopping} onClick={() => stop.mutate(m.id)}>
+                        {!stopping && <Square className="fill-current" />}
+                        Stop
                       </Button>
-                    ))}
+                    </>
+                  )}
+                  {chatCapable && !running && (
+                    <Button variant="secondary" size="sm" onClick={() => setStartTarget(m)}>
+                      <Play />
+                      Start
+                    </Button>
+                  )}
                   {chatCapable && (
                     <Button
-                      variant="secondary"
-                      size="sm"
-                      title="Base URL, API key, and code snippets for this model"
+                      variant="ghost"
+                      size="icon"
+                      title="Use from code"
+                      aria-label={`Use ${m.display_name} from code`}
                       onClick={() => setConnectTarget(m)}
                     >
-                      <Code2 className="h-4 w-4" /> Connect
+                      <Code2 />
                     </Button>
                   )}
                   <Button
                     variant="ghost"
                     size="icon"
-                    disabled={action.isPending}
-                    onClick={() => action.mutate({ id: m.id, verb: "update" })}
+                    title={updating ? "Updating" : "Check for updates"}
+                    aria-label={`Check ${m.display_name} for updates`}
+                    disabled={Boolean(updating)}
+                    loading={update.isPending && update.variables === m.id}
+                    onClick={() => update.mutate(m.id)}
                   >
-                    <RefreshCw className="h-4 w-4" />
+                    {!(update.isPending && update.variables === m.id) && <RefreshCw />}
                   </Button>
                   <Button
                     variant="ghost"
                     size="icon"
-                    disabled={action.isPending}
-                    onClick={() => {
-                      if (confirm(`Delete ${m.display_name}? This removes the weights from disk.`))
-                        action.mutate({ id: m.id, verb: "delete" });
-                    }}
+                    title="Delete"
+                    aria-label={`Delete ${m.display_name}`}
+                    className="hover:text-destructive"
+                    onClick={() => setDeleteTarget(m)}
                   >
-                    <Trash2 className="h-4 w-4 text-destructive" />
+                    <Trash2 />
                   </Button>
                 </div>
-              </Card>
+              </li>
             );
           })}
-        </div>
+        </ul>
       )}
 
-      {connectTarget && (
-        <ConnectDialog model={connectTarget} onClose={() => setConnectTarget(null)} />
-      )}
-
-      {startTarget && !action.isPending && (
-        <StartDialog
+      {startTarget && (
+        <StartModelDialog
           model={startTarget}
-          onCancel={() => setStartTarget(null)}
-          onStart={(context_length, enable_thinking) => {
-            action.mutate({
-              id: startTarget.id,
-              verb: "start",
-              body: { context_length, enable_thinking },
-            });
+          onClose={() => setStartTarget(null)}
+          onStarted={(m) => {
+            setStartTarget(null);
+            // The moment a model comes up is when "how do I call it from my
+            // code?" gets asked; answer it right away.
+            setConnectTarget(m);
           }}
         />
       )}
-
-      {action.isPending && action.variables?.verb === "start" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-          <Card className="flex items-center gap-3 shadow-glow">
-            <Loader2 className="h-5 w-5 animate-spin text-accent" />
-            <div>
-              <p className="text-sm font-medium">Starting {startTarget?.display_name}…</p>
-              <p className="text-xs text-muted-foreground">
-                Loading weights into memory. Large models can take a while.
-              </p>
-            </div>
-          </Card>
-        </div>
-      )}
-    </div>
-  );
-}
-
-const FIT_LABEL: Record<Estimate["fit"], { text: string; tone: "green" | "amber" | "red" | "muted" }> = {
-  fits: { text: "Fits", tone: "green" },
-  tight: { text: "Tight", tone: "amber" },
-  too_big: { text: "Too big", tone: "red" },
-  unknown: { text: "Unknown", tone: "muted" },
-};
-
-function StartDialog({
-  model,
-  onCancel,
-  onStart,
-}: {
-  model: Model;
-  onCancel: () => void;
-  onStart: (contextLength: number, enableThinking: boolean) => void;
-}) {
-  const [ctx, setCtx] = useState<number>(model.context_length || 4096);
-  const [thinking, setThinking] = useState(true);
-  const [est, setEst] = useState<Estimate | null>(null);
-  const maxCtx = est?.max_context || model.context_length || 32768;
-
-  // Debounced live estimate as the slider moves.
-  useEffect(() => {
-    const t = setTimeout(() => {
-      api<Estimate>(`/models/${model.id}/estimate?context_length=${ctx}`)
-        .then(setEst)
-        .catch(() => setEst(null));
-    }, 200);
-    return () => clearTimeout(t);
-  }, [ctx, model.id]);
-
-  const fit = est ? FIT_LABEL[est.fit] : FIT_LABEL.unknown;
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm"
-      onClick={onCancel}
-    >
-      <Card
-        className="w-[28rem] max-w-[90vw] space-y-4 shadow-glow"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div>
-          <h2 className="text-base font-semibold">Start {model.display_name}</h2>
-          <p className="text-xs text-muted-foreground">
-            Larger context lets the model see more text at once, but uses more memory.
+      {connectTarget && <ConnectDialog model={connectTarget} onClose={() => setConnectTarget(null)} />}
+      {deleteTarget && (
+        <ConfirmDialog
+          title={`Delete ${deleteTarget.display_name}?`}
+          confirmLabel="Delete"
+          busy={remove.isPending}
+          onCancel={() => {
+            remove.reset();
+            setDeleteTarget(null);
+          }}
+          onConfirm={() =>
+            remove.mutate(deleteTarget.id, {
+              onSuccess: () => setDeleteTarget(null),
+            })
+          }
+        >
+          <p>
+            This removes <span className="tabular font-medium text-foreground">{bytes(deleteTarget.download_bytes)}</span>{" "}
+            of weights from disk. You can download it again from the catalog.
           </p>
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Context length</span>
-            <span className="font-mono">{ctx.toLocaleString()} tokens</span>
-          </div>
-          <input
-            type="range"
-            min={1024}
-            max={maxCtx}
-            step={1024}
-            value={Math.min(ctx, maxCtx)}
-            onChange={(e) => setCtx(Number(e.target.value))}
-            className="w-full accent-accent"
-          />
-          <div className="flex justify-between text-[10px] text-muted-foreground">
-            <span>1K</span>
-            <span>{Math.round(maxCtx / 1024)}K max</span>
-          </div>
-        </div>
-
-        <div className="rounded-md border border-border bg-muted/40 p-3 text-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Estimated memory</span>
-            <span className="flex items-center gap-2">
-              <span className="font-mono font-medium">
-                {est?.est_ram_bytes != null ? bytes(est.est_ram_bytes) : "—"}
-              </span>
-              <Badge tone={fit.tone}>{fit.text}</Badge>
-            </span>
-          </div>
-          {est?.est_ram_bytes != null && (
-            <dl className="mt-2 space-y-0.5 text-xs text-muted-foreground">
-              <div className="flex justify-between">
-                <dt>Weights</dt>
-                <dd className="font-mono">{bytes(est.weight_bytes)}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt>KV cache (grows with context)</dt>
-                <dd className="font-mono">{bytes(est.kv_cache_bytes)}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt>Overhead</dt>
-                <dd className="font-mono">{bytes(est.overhead_bytes)}</dd>
-              </div>
-              <div className="flex justify-between border-t border-border pt-1">
-                <dt>Free right now</dt>
-                <dd className="font-mono">{bytes(est.budget_bytes)}</dd>
-              </div>
-            </dl>
-          )}
-        </div>
-
-        <label className="flex items-center justify-between gap-3 text-sm">
-          <span>
-            <span className="block">Reasoning (thinking)</span>
-            <span className="text-xs text-muted-foreground">
-              Off = direct answers, no &lt;think&gt; block (Qwen3 etc.)
-            </span>
-          </span>
-          <input
-            type="checkbox"
-            checked={thinking}
-            onChange={(e) => setThinking(e.target.checked)}
-            className="h-4 w-4 accent-accent"
-          />
-        </label>
-
-        <div className="flex justify-end gap-2">
-          <Button variant="secondary" size="sm" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button size="sm" disabled={est?.fit === "too_big"} onClick={() => onStart(ctx, thinking)}>
-            <Play className="h-4 w-4" /> Start
-          </Button>
-        </div>
-      </Card>
+          {remove.isError && <InlineError className="mt-3">{remove.error.message}</InlineError>}
+        </ConfirmDialog>
+      )}
     </div>
   );
 }

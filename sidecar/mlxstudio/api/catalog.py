@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..schemas import CatalogQuery
+from ..schemas import CatalogQuery, CatalogSort
 from ..security import require_internal_token
 from ..services import estimator, hf_catalog, metrics
 from ..services.engine import engine
@@ -21,7 +21,7 @@ def search(
     ctx_min: int | None = None,
     vision: bool | None = None,
     instruct: bool | None = None,
-    sort: str = "downloads",
+    sort: CatalogSort = "downloads",
     limit: int = 30,
 ):
     query = CatalogQuery(

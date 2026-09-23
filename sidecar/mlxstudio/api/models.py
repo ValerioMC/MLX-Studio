@@ -7,8 +7,6 @@ import shutil
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-
-logger = logging.getLogger(__name__)
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -18,6 +16,8 @@ from ..schemas import ModelOut, StartModelRequest
 from ..security import require_internal_token
 from ..services import estimator, hf_catalog, metrics
 from ..services.engine import engine
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/models", tags=["models"], dependencies=[Depends(require_internal_token)])
 
@@ -137,7 +137,9 @@ def start_model(model_id: str, req: StartModelRequest, db: Session = Depends(get
 def stop_model(model_id: str, db: Session = Depends(get_db)):
     ok = engine.unload_model(model_id)
     if ok:
-        db.add(Activity(kind="stop", model_id=model_id, message=f"Stopped {model_id}"))
+        m = db.get(Model, model_id)
+        name = m.display_name if m else model_id
+        db.add(Activity(kind="stop", model_id=model_id, message=f"Stopped {name}"))
         db.commit()
     return {"status": "installed", "model_id": model_id, "was_running": ok}
 
@@ -163,7 +165,9 @@ def update_model(model_id: str, db: Session = Depends(get_db)):
         raise HTTPException(404, "Model not found")
     from ..services.download_manager import manager
 
-    job = manager.start(f"update-{model_id}", m.hf_repo_id)
+    # The update writes into the installed model's directory, so canceling it
+    # must keep the weights that are already there.
+    job = manager.start(f"update-{model_id}", m.hf_repo_id, keep_files_on_cancel=True)
     return {"ok": True, "job_id": job.id}
 
 

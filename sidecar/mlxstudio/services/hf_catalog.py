@@ -19,15 +19,18 @@ try:
 except Exception:  # pragma: no cover
     _api = None
 
-_PARAM_RE = re.compile(r"(\d+(?:\.\d+)?)\s*[bB]")
-_QUANT_RE = re.compile(r"(\d+)bit|bf16|fp16|fp32", re.IGNORECASE)
+# "7B", "0.6B", but not the "4b" in "4bit" nor the active-expert "A3B" of an MoE.
+_PARAM_RE = re.compile(r"(?<![a-zA-Z\d.])(\d+(?:\.\d+)?)\s*[bB](?![a-zA-Z])")
+_QUANT_RE = re.compile(r"(\d+)bit|bf16|fp16|fp32|mxfp4|nvfp4", re.IGNORECASE)
+# "Instruct", "chat", or gemma's "-it" suffix; never the "it" ending "4bit".
+_INSTRUCT_RE = re.compile(r"instruct|chat|(?:^|[-_])it(?:$|[-_])", re.IGNORECASE)
 
 # Model families mlx-community hosts that are not text-generation LLMs, so the chat
 # engine (mlx_lm) cannot load them. Excluded from the catalog to avoid downloading
 # something that can't be started.
 _NON_LLM_RE = re.compile(
     r"whisper|parakeet|wav2vec|encodec|musicgen|bark|"
-    r"embed|bert|gte-|bge-|clip|siglip|"
+    r"embed|bert|minilm|rerank|gte-|bge-|clip|siglip|\basr\b|"
     r"stable-?diffusion|\bsd-|flux|sana|"
     r"\btts\b|vits|kokoro",
     re.IGNORECASE,
@@ -79,7 +82,7 @@ def parse_repo_meta(repo_id: str) -> dict:
         "params_b": float(pm.group(1)) if pm else None,
         "quantization": (qm.group(0).lower() if qm else None),
         "vision": bool(re.search(r"vl|vision|llava", name, re.IGNORECASE)),
-        "instruct": bool(re.search(r"instruct|chat|it\b", name, re.IGNORECASE)),
+        "instruct": bool(_INSTRUCT_RE.search(name)),
     }
 
 
@@ -133,7 +136,7 @@ def search(query: CatalogQuery) -> list[dict]:
                 for m in _api.list_models(
                     author="mlx-community",
                     search=term,
-                    sort="downloads",
+                    sort=_HUB_SORT[query.sort],
                     limit=max(query.limit * 2, 40),
                     token=token,
                 ):
@@ -148,10 +151,13 @@ def search(query: CatalogQuery) -> list[dict]:
                             "description": None,
                             "context_length": None,
                             "downloads_30d": getattr(m, "downloads", 0),
+                            "likes": getattr(m, "likes", 0) or 0,
+                            "last_modified": _iso(getattr(m, "last_modified", None)),
                             **meta,
                         }
                     )
-            results.sort(key=lambda r: r.get("downloads_30d") or 0, reverse=True)
+            # Several Hub queries (the vision case) merge here, so re-apply the order.
+            results.sort(key=_SORT_KEYS[query.sort], reverse=True)
         except Exception:
             logger.exception("Hugging Face catalog query failed; serving seed list")
             results = list(_SEED)
@@ -159,6 +165,21 @@ def search(query: CatalogQuery) -> list[dict]:
         results = list(_SEED)
 
     return [r for r in results if _matches(r, query)][: query.limit]
+
+
+# Catalog sort -> the Hub's list_models sort field.
+_HUB_SORT = {"downloads": "downloads", "likes": "likes", "recent": "lastModified"}
+
+_SORT_KEYS = {
+    "downloads": lambda r: r.get("downloads_30d") or 0,
+    "likes": lambda r: r.get("likes") or 0,
+    "recent": lambda r: r.get("last_modified") or "",
+}
+
+
+def _iso(value: object) -> str | None:
+    isoformat = getattr(value, "isoformat", None)
+    return isoformat() if callable(isoformat) else None
 
 
 def _matches(r: dict, q: CatalogQuery) -> bool:

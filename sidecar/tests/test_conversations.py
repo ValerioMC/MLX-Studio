@@ -48,3 +48,38 @@ def test_conversation_lifecycle(client):
 
 def test_conversations_require_auth(client):
     assert client.get("/conversations").status_code == 401
+
+
+def test_replace_messages_rewrites_thread_and_keeps_title(client):
+    conv_id = client.post("/conversations", json={}, headers=AUTH).json()["id"]
+    client.post(
+        f"/conversations/{conv_id}/messages",
+        json={
+            "messages": [
+                {"role": "user", "content": "Name a color"},
+                {"role": "assistant", "content": "Red."},
+            ]
+        },
+        headers=AUTH,
+    )
+
+    replaced = client.put(
+        f"/conversations/{conv_id}/messages",
+        json={
+            "messages": [
+                {"role": "user", "content": "Name a color"},
+                {"role": "assistant", "content": "Blue.", "tok_per_sec": 30.0},
+            ]
+        },
+        headers=AUTH,
+    )
+
+    assert replaced.status_code == 200
+    assert replaced.json()["title"] == "Name a color"
+    items = client.get(f"/conversations/{conv_id}/messages", headers=AUTH).json()["items"]
+    assert [m["content"] for m in items] == ["Name a color", "Blue."]
+
+
+def test_replace_messages_unknown_conversation(client):
+    response = client.put("/conversations/nope/messages", json={"messages": []}, headers=AUTH)
+    assert response.status_code == 404

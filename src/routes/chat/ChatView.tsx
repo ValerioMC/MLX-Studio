@@ -1,433 +1,276 @@
-import { useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api/client";
-import { streamChat, type ChatMsg } from "@/lib/api/chat";
-import { Button } from "@/components/ui/primitives";
-import { Markdown } from "@/components/chat/Markdown";
-import { useChat } from "@/stores/chat";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { ArrowDown, Pencil, Play } from "lucide-react";
+import { useConversations, useModels } from "@/lib/api/queries";
 import { cn } from "@/lib/utils";
-import type { Conversation, Model } from "@/types";
-import {
-  Send,
-  Square,
-  Plus,
-  Trash2,
-  MessageSquare,
-  ImagePlus,
-  X,
-} from "lucide-react";
+import { contextSize } from "@/lib/format";
+import { useChat } from "@/stores/chat";
+import { useLive } from "@/stores/live";
+import { usePreferences } from "@/stores/preferences";
+import { StartModelDialog } from "@/components/models/StartModelDialog";
+import { ModelFacts } from "@/components/models/ModelFacts";
+import { Button, StatusDot, fieldClass } from "@/components/ui/primitives";
+import type { Model } from "@/types";
+import { ChatSettingsButton } from "./ChatSettings";
+import { Composer } from "./Composer";
+import { ConversationList } from "./ConversationList";
+import { Message } from "./Message";
+import { regenerate, renameConversation, sendMessage, stopGenerating } from "./useChatSession";
 
-const MAX_ATTACHMENTS = 4;
+/** Within this distance of the bottom, new output keeps the thread scrolled down. */
+const STICK_THRESHOLD_PX = 72;
 
-interface StoredMessage {
-  role: ChatMsg["role"];
-  content: string;
-  tok_per_sec?: number | null;
+function ConversationTitle() {
+  const conversationId = useChat((s) => s.conversationId);
+  const { data: conversations } = useConversations();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const title = conversations?.find((c) => c.id === conversationId)?.title || (conversationId ? "Untitled chat" : "New chat");
+
+  if (editing && conversationId) {
+    const save = () => {
+      const next = draft.trim();
+      setEditing(false);
+      if (next && next !== title) void renameConversation(conversationId, next).catch(() => undefined);
+    };
+    return (
+      <input
+        autoFocus
+        value={draft}
+        aria-label="Chat title"
+        maxLength={48}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") save();
+          if (e.key === "Escape") setEditing(false);
+        }}
+        className={cn(fieldClass, "h-8 max-w-[24rem] text-lg font-semibold")}
+      />
+    );
+  }
+
+  return (
+    <h1 className="group flex min-w-0 items-center gap-1.5 text-lg font-semibold">
+      <span className="truncate">{title}</span>
+      {conversationId && (
+        <button
+          type="button"
+          aria-label="Rename chat"
+          title="Rename"
+          onClick={() => {
+            setDraft(title);
+            setEditing(true);
+          }}
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+        >
+          <Pencil className="h-3 w-3" />
+        </button>
+      )}
+    </h1>
+  );
+}
+
+function NoModelRunning({ installed, onStart }: { installed: Model[]; onStart: (model: Model) => void }) {
+  const navigate = useNavigate();
+  return (
+    <div className="mx-auto flex w-full max-w-[34rem] flex-col gap-4 pt-[12vh]">
+      <div>
+        <h2 className="text-xl font-semibold">Start a model to chat</h2>
+        <p className="pt-1 text-md text-muted-foreground">
+          {installed.length
+            ? "Pick one of your installed models. It stays loaded until you stop it."
+            : "You have no chat models yet. Download one from the catalog first."}
+        </p>
+      </div>
+      {installed.length > 0 ? (
+        <ul className="divide-y border-y">
+          {installed.map((m) => (
+            <li key={m.id} className="flex items-center gap-3 py-2.5">
+              <StatusDot tone="idle" />
+              <span className="min-w-0 flex-1 truncate text-md font-medium">{m.display_name}</span>
+              <ModelFacts model={m} />
+              <Button variant="secondary" size="sm" onClick={() => onStart(m)}>
+                <Play />
+                Start
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div>
+          <Button onClick={() => navigate("/catalog")}>Browse the catalog</Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FreshThread({ model, contextLength }: { model: Model; contextLength?: number }) {
+  return (
+    <div className="mx-auto flex w-full max-w-[44rem] flex-col items-start gap-2 pt-[18vh]">
+      <p className="flex items-center gap-2 text-sm text-muted-foreground">
+        <StatusDot tone="positive" />
+        Running{contextLength ? ` with ${contextSize(contextLength)} context` : ""}
+      </p>
+      <h2 className="text-2xl font-semibold">{model.display_name}</h2>
+      <ModelFacts model={model} />
+      <p className="pt-2 text-md text-muted-foreground">Everything you send stays on this Mac.</p>
+    </div>
+  );
 }
 
 export function ChatView() {
-  const qc = useQueryClient();
-  const { data: models } = useQuery({
-    queryKey: ["models"],
-    queryFn: () => api<Model[]>("/models"),
-  });
-  const { data: convs } = useQuery({
-    queryKey: ["conversations"],
-    queryFn: () => api<{ items: Conversation[] }>("/conversations"),
-  });
+  const { data: models } = useModels();
+  const stats = useLive((s) => s.stats);
+  const messages = useChat((s) => s.messages);
+  const busy = useChat((s) => s.busy);
+  const selected = useChat((s) => s.model);
+  const setModel = useChat((s) => s.setModel);
+  const maxTokens = usePreferences((s) => s.maxTokens);
+  const [startTarget, setStartTarget] = useState<Model | null>(null);
+
   const running = models?.filter((m) => m.status === "running") ?? [];
-  const {
-    messages,
-    input,
-    model,
-    busy,
-    conversationId,
-    setInput,
-    setModel,
-    setBusy,
-    setConversationId,
-    setAbort,
-    setMessages,
-    reset,
-  } = useChat();
+  const installed = models?.filter((m) => m.status !== "running" && m.chat_capable !== false) ?? [];
+  const activeModel = running.find((m) => m.id === selected) ?? running[0];
+  const active = activeModel?.id ?? "";
+  const selectedStopped = selected !== "" && !running.some((m) => m.id === selected) && messages.length > 0;
+  const contextLength = stats?.loaded_models.find((m) => m.model_id === active)?.context_length;
+
+  // --- scrolling: follow new output only while the reader is at the bottom.
   const scrollRef = useRef<HTMLDivElement>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-  // Pending image attachments as data URLs; only offered for vision models.
-  const [attachments, setAttachments] = useState<string[]>([]);
+  const stickRef = useRef(true);
+  const [showJump, setShowJump] = useState(false);
 
-  const active = model || running[0]?.id || "";
-  const activeModel = running.find((m) => m.id === active);
-  const canAttach = !!activeModel?.vision;
+  const scrollToBottom = useCallback((smooth: boolean) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+    stickRef.current = true;
+    setShowJump(false);
+  }, []);
 
-  const addImages = (files: Iterable<File>) => {
-    for (const file of files) {
-      if (!file.type.startsWith("image/")) continue;
-      const reader = new FileReader();
-      reader.onload = () =>
-        setAttachments((prev) =>
-          prev.length >= MAX_ATTACHMENTS
-            ? prev
-            : [...prev, String(reader.result)],
-        );
-      reader.readAsDataURL(file);
-    }
+  useLayoutEffect(() => {
+    if (stickRef.current) scrollToBottom(false);
+    else setShowJump(true);
+  }, [messages, scrollToBottom]);
+
+  // A new question always brings the answer into view.
+  const lastRole = messages[messages.length - 1]?.role;
+  const count = messages.length;
+  useEffect(() => {
+    if (lastRole === "assistant" && busy) scrollToBottom(false);
+  }, [count, lastRole, busy, scrollToBottom]);
+
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < STICK_THRESHOLD_PX;
+    stickRef.current = atBottom;
+    if (atBottom) setShowJump(false);
   };
 
-  const persistExchange = (
-    convId: string,
-    userText: string,
-    assistant: StoredMessage,
-  ) => {
-    api(`/conversations/${convId}/messages`, {
-      method: "POST",
-      body: JSON.stringify({
-        messages: [{ role: "user", content: userText }, assistant],
-      }),
-    })
-      .then(() => qc.invalidateQueries({ queryKey: ["conversations"] }))
-      .catch(() => {
-        /* history is best-effort; the live thread is unaffected */
-      });
-  };
-
-  const send = async () => {
-    if ((!input.trim() && attachments.length === 0) || !active || busy) return;
-    const userText = input;
-    const userImages = attachments;
-    const next = [
-      ...messages,
-      {
-        role: "user" as const,
-        content: userText,
-        images: userImages.length ? userImages : undefined,
-      },
-    ];
-    setMessages([...next, { role: "assistant", content: "", streaming: true }]);
-    setInput("");
-    setAttachments([]);
-    setBusy(true);
-
-    let convId = conversationId;
-    if (!convId) {
-      try {
-        const conv = await api<Conversation>("/conversations", {
-          method: "POST",
-          body: JSON.stringify({ model_id: active }),
-        });
-        convId = conv.id;
-        setConversationId(convId);
-      } catch {
-        convId = null; // keep chatting unpersisted rather than blocking
-      }
-    }
-
-    // Accumulated outside React state so onDone can persist the final text
-    // without reading state mid-update.
-    let assistantText = "";
-
-    // Messages with images become OpenAI-style content parts; past images stay
-    // in the history so a vision model keeps seeing them on follow-up turns.
-    const history: ChatMsg[] = next.map(({ role, content, images }) =>
-      images?.length
-        ? {
-            role,
-            content: [
-              ...images.map((url) => ({
-                type: "image_url" as const,
-                image_url: { url },
-              })),
-              ...(content ? [{ type: "text" as const, text: content }] : []),
-            ],
-          }
-        : { role, content },
-    );
-    setAbort(
-      streamChat(
-        active,
-        history,
-        {},
-        (token) => {
-          assistantText += token;
-          setMessages((prev) => {
-            const copy = [...prev];
-            copy[copy.length - 1] = {
-              ...copy[copy.length - 1],
-              content: copy[copy.length - 1].content + token,
-            };
-            requestAnimationFrame(() =>
-              scrollRef.current?.scrollTo({
-                top: scrollRef.current.scrollHeight,
-              }),
-            );
-            return copy;
-          });
-        },
-        (meta) => {
-          setMessages((prev) => {
-            const copy = [...prev];
-            const last = copy[copy.length - 1];
-            copy[copy.length - 1] = {
-              ...last,
-              streaming: false,
-              error: !!meta.error,
-              tokPerSec: meta.tokPerSec,
-              content: meta.error
-                ? [last.content, `Something went wrong: ${meta.error}`]
-                    .filter(Boolean)
-                    .join("\n\n")
-                : last.content,
-            };
-            return copy;
-          });
-          setBusy(false);
-          if (convId && !meta.error && assistantText) {
-            persistExchange(convId, userText, {
-              role: "assistant",
-              content: assistantText,
-              tok_per_sec: meta.tokPerSec ?? null,
-            });
-          }
-        },
-      ),
-    );
-  };
-
-  const stop = () => {
-    useChat.getState().abort?.();
-    setBusy(false);
-  };
-
-  const openConversation = async (c: Conversation) => {
-    if (busy || c.id === conversationId) return;
-    try {
-      const res = await api<{ items: StoredMessage[] }>(
-        `/conversations/${c.id}/messages`,
-      );
-      setMessages(
-        res.items.map((m) => ({
-          role: m.role,
-          content: m.content,
-          tokPerSec: m.tok_per_sec ?? undefined,
-        })),
-      );
-      setConversationId(c.id);
-      if (c.model_id) setModel(c.model_id);
-    } catch {
-      /* conversation may have been deleted elsewhere */
-    }
-  };
-
-  const deleteConversation = async (id: string) => {
-    await api(`/conversations/${id}`, { method: "DELETE" }).catch(() => {});
-    qc.invalidateQueries({ queryKey: ["conversations"] });
-    if (id === conversationId) reset();
-  };
+  const onRegenerate = useCallback(() => regenerate(active), [active]);
 
   return (
-    <div className="animate-fade-in flex min-h-0 flex-1 gap-5 pt-2">
-      <aside className="flex w-56 shrink-0 flex-col">
-        <Button
-          variant="secondary"
-          size="sm"
-          className="mb-3 w-full"
-          disabled={busy}
-          onClick={reset}
-        >
-          <Plus className="h-4 w-4" /> New chat
-        </Button>
-        <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto pr-1">
-          {convs?.items.map((c) => (
-            <div
-              key={c.id}
-              onClick={() => openConversation(c)}
-              className={cn(
-                "group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
-                c.id === conversationId
-                  ? "bg-accent/10 text-accent ring-1 ring-accent/40"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
-              )}
-            >
-              <MessageSquare className="h-3.5 w-3.5 shrink-0" />
-              <span className="min-w-0 flex-1 truncate">
-                {c.title || "New chat"}
-              </span>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  deleteConversation(c.id);
-                }}
-                title="Delete conversation"
-                className="hidden shrink-0 rounded p-0.5 hover:bg-destructive/15 hover:text-destructive group-hover:block"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ))}
-          {!convs?.items.length && (
-            <p className="px-2 py-1.5 text-xs text-muted-foreground">
-              No conversations yet.
-            </p>
-          )}
-        </div>
-      </aside>
+    <div className="flex h-full min-h-0">
+      <ConversationList />
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="flex shrink-0 items-center justify-between pb-3">
-          <h1 className="text-2xl font-semibold tracking-tight">Chat</h1>
-          <select
-            value={active}
-            onChange={(e) => setModel(e.target.value)}
-            className="h-8 rounded-md border border-input bg-card px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-          >
-            {running.length === 0 && <option value="">No model running</option>}
-            {running.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.display_name}
-              </option>
-            ))}
-          </select>
+      <section className="relative flex min-w-0 flex-1 flex-col">
+        <header className="flex h-10 shrink-0 items-center justify-between gap-4 px-6">
+          <ConversationTitle />
+          <div className="flex items-center gap-1.5">
+            {running.length > 0 && (
+              <select
+                value={active}
+                onChange={(e) => setModel(e.target.value)}
+                aria-label="Model"
+                disabled={busy}
+                className={cn(fieldClass, "h-7 w-auto max-w-[16rem] pr-7 text-sm")}
+              >
+                {running.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.display_name}
+                  </option>
+                ))}
+              </select>
+            )}
+            <ChatSettingsButton />
+          </div>
         </header>
 
         <div
           ref={scrollRef}
-          className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-2"
+          onScroll={onScroll}
+          className="min-h-0 flex-1 overflow-y-auto px-6 [mask-image:linear-gradient(to_bottom,transparent,black_20px)]"
         >
-          {messages.length === 0 && (
-            <div className="flex h-full items-center justify-center text-center text-sm text-muted-foreground">
-              {running.length
-                ? "Start chatting with your local model."
-                : "Start a model from the Models tab to begin."}
-            </div>
+          {messages.length === 0 && !activeModel && models && (
+            <NoModelRunning installed={installed} onStart={setStartTarget} />
           )}
-          {messages.map((m, i) => (
-            <div
-              key={i}
-              className={
-                m.role === "user" ? "flex justify-end" : "flex justify-start"
-              }
-            >
-              <div
-                className={
-                  "max-w-[80%] rounded-2xl px-4 py-2.5 text-sm " +
-                  (m.role === "user"
-                    ? "bg-accent text-accent-foreground"
-                    : m.error
-                      ? "bg-card border border-destructive/60"
-                      : "bg-card border border-border")
-                }
-              >
-                {m.images && m.images.length > 0 && (
-                  <div className="mb-2 flex flex-wrap gap-2">
-                    {m.images.map((src, k) => (
-                      <img
-                        key={k}
-                        src={src}
-                        alt="attachment"
-                        className="max-h-40 rounded-lg border border-border/50 object-contain"
-                      />
-                    ))}
-                  </div>
-                )}
-                {m.role === "assistant" ? (
-                  <Markdown content={m.content || "…"} />
-                ) : (
-                  m.content
-                )}
-                {m.role === "assistant" &&
-                  !m.streaming &&
-                  m.tokPerSec != null && (
-                    <p className="mt-1 text-right text-[10px] text-muted-foreground">
-                      {m.tokPerSec.toFixed(1)} tok/s
-                    </p>
-                  )}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-3 shrink-0 rounded-xl border border-input bg-card p-2">
-          {attachments.length > 0 && (
-            <div className="mb-2 flex flex-wrap gap-2 px-2 pt-1">
-              {attachments.map((src, i) => (
-                <div key={i} className="group relative">
-                  <img
-                    src={src}
-                    alt={`attachment ${i + 1}`}
-                    className="h-16 w-16 rounded-lg border border-border object-cover"
-                  />
-                  <button
-                    onClick={() =>
-                      setAttachments((prev) => prev.filter((_, k) => k !== i))
-                    }
-                    title="Remove image"
-                    className="absolute -right-1.5 -top-1.5 rounded-full border border-border bg-background p-0.5 text-muted-foreground hover:text-destructive"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
+          {messages.length === 0 && activeModel && <FreshThread model={activeModel} contextLength={contextLength} />}
+          {messages.length > 0 && (
+            <div className="mx-auto flex w-full max-w-[44rem] flex-col gap-7 pb-8 pt-4">
+              {messages.map((m, i) => (
+                <Message
+                  key={m.id}
+                  message={m}
+                  isLast={i === messages.length - 1}
+                  onRegenerate={i === messages.length - 1 && active ? onRegenerate : undefined}
+                  maxTokens={maxTokens}
+                />
               ))}
             </div>
           )}
-          <div className="flex items-end gap-2">
-            {canAttach && (
-              <>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => {
-                    addImages(e.target.files ?? []);
-                    e.target.value = "";
-                  }}
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  title="Attach images (or paste)"
-                  disabled={busy || attachments.length >= MAX_ATTACHMENTS}
-                  onClick={() => fileRef.current?.click()}
-                >
-                  <ImagePlus className="h-4 w-4" />
-                </Button>
-              </>
+        </div>
+
+        {showJump && (
+          <button
+            type="button"
+            onClick={() => scrollToBottom(true)}
+            className="absolute bottom-[6.5rem] left-1/2 flex h-7 -translate-x-1/2 items-center gap-1.5 rounded-full bg-card px-3 text-sm font-medium shadow-dialog hover:bg-muted"
+          >
+            <ArrowDown className="h-3.5 w-3.5" />
+            Jump to latest
+          </button>
+        )}
+
+        <div className="shrink-0 px-6 pb-5 pt-2">
+          <div className="mx-auto w-full max-w-[44rem]">
+            {selectedStopped && activeModel && (
+              <p className="pb-2 text-sm text-caution">
+                The model this chat used is not running. Replies will come from {activeModel.display_name}.
+              </p>
             )}
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  send();
-                }
-              }}
-              onPaste={(e) => {
-                if (!canAttach) return;
-                const files = Array.from(e.clipboardData.files);
-                if (files.length) {
-                  e.preventDefault();
-                  addImages(files);
-                }
-              }}
-              rows={1}
+            <Composer
+              disabled={!active}
+              canAttach={!!activeModel?.vision}
               placeholder={
-                canAttach ? "Message… (images can be pasted)" : "Message…"
+                !active
+                  ? "Start a model to send a message"
+                  : activeModel?.vision
+                    ? `Message ${activeModel.display_name}, or drop an image`
+                    : `Message ${activeModel?.display_name ?? ""}`
               }
-              className="max-h-32 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm outline-none"
+              onSend={(text, images) => sendMessage(active, text, images)}
+              onStop={stopGenerating}
             />
-            {busy ? (
-              <Button variant="destructive" size="icon" onClick={stop}>
-                <Square className="h-4 w-4" />
-              </Button>
-            ) : (
-              <Button size="icon" onClick={send} disabled={!active}>
-                <Send className="h-4 w-4" />
-              </Button>
-            )}
+            <p className="pt-1.5 text-center text-2xs text-muted-foreground">
+              Enter to send, Shift+Enter for a new line
+            </p>
           </div>
         </div>
-      </div>
+      </section>
+
+      {startTarget && (
+        <StartModelDialog
+          model={startTarget}
+          onClose={() => setStartTarget(null)}
+          onStarted={(m) => {
+            setStartTarget(null);
+            setModel(m.id);
+          }}
+        />
+      )}
     </div>
   );
 }

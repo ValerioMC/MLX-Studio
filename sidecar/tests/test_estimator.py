@@ -98,3 +98,12 @@ def test_installed_breakdown_falls_back_to_heuristic(tmp_path):
     b = estimator.installed_breakdown(str(tmp_path), params_b=1.0, quant="4bit", ctx=1024)
     assert b is not None
     assert b["weight_bytes"] == int(1e9 * 0.5)
+
+
+def test_weight_bytes_any_bit_width():
+    assert estimator.weight_bytes(8.0, "6bit") == int(8e9 * 0.75)
+    assert estimator.weight_bytes(8.0, "3bit") == int(8e9 * 0.375)
+
+
+def test_weight_bytes_fp4_formats():
+    assert estimator.weight_bytes(20.0, "mxfp4") == int(20e9 * 0.53)
