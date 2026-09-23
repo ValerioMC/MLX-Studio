@@ -2,7 +2,8 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import { ApiError, api, baseUrl } from "@/lib/api/client";
-import { AlertTriangle, Loader2 } from "lucide-vue-next";
+import ModelCore from "@/components/instruments/ModelCore.vue";
+import Callout from "@/components/ui/Callout.vue";
 
 type ConnectionState = "ok" | "unreachable" | "unauthorized";
 
@@ -68,18 +69,17 @@ const show = computed(() => !!probe.value && state.value !== undefined && state.
 </script>
 
 <template>
-  <div v-if="show" class="no-drag px-8 pb-3">
-    <div
-      role="status"
-      :class="
-        starting
-          ? 'mx-auto flex max-w-[64rem] items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground'
-          : 'mx-auto flex max-w-[64rem] items-center gap-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive'
-      "
-    >
-      <Loader2 v-if="starting" class="h-3.5 w-3.5 shrink-0 animate-spin" />
-      <AlertTriangle v-else class="h-3.5 w-3.5 shrink-0" />
-      <span>{{ starting ? "Starting the local engine…" : ERROR_MESSAGES[state as Exclude<ConnectionState, "ok">] }}</span>
+  <Transition name="pane">
+    <div v-if="show" class="pt-4">
+      <div
+        v-if="starting"
+        role="status"
+        class="flex items-center gap-3 rounded-control border border-line bg-surface/70 px-3.5 py-2.5 text-sm text-muted"
+      >
+        <ModelCore state="loading" :size="16" label="Starting" />
+        Starting the local engine…
+      </div>
+      <Callout v-else>{{ ERROR_MESSAGES[state as Exclude<ConnectionState, "ok">] }}</Callout>
     </div>
-  </div>
+  </Transition>
 </template>

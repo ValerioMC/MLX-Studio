@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { memoryLedger, nextTone } from "./memory";
+import { memoryCells, memoryLedger, nextTone } from "./memory";
 import type { SystemStats } from "@/types";
 
 const GB = 1024 ** 3;
@@ -93,5 +93,37 @@ describe("nextTone", () => {
     expect(nextTone([0, 2])).toBe(1);
     expect(nextTone([0, 1, 2, 3])).toBe(0);
     expect(nextTone([0, 1, 2, 3, 0, 1])).toBe(2);
+  });
+});
+
+describe("memoryCells", () => {
+  it("gives one cell per GB when that fits, each owned by the segment at its midpoint", () => {
+    const ledger = memoryLedger(
+      stats({ loaded_models: [{ model_id: "qwen", context_length: 4096, est_ram_bytes: 10 * GB }] }),
+      name,
+    );
+    const { cells, cellBytes } = memoryCells(ledger, 64);
+
+    expect(cellBytes).toBe(GB);
+    expect(cells).toHaveLength(64);
+    expect(cells.slice(0, 10).every((c) => c.kind === "model" && c.tone === 0)).toBe(true);
+    expect(cells[10]?.kind).toBe("system");
+    expect(cells[cells.length - 1]?.kind).toBe("free");
+  });
+
+  it("doubles the cell size until the strip fits the limit", () => {
+    const { cells, cellBytes } = memoryCells(memoryLedger(stats(), name), 48);
+
+    expect(cellBytes).toBe(2 * GB);
+    expect(cells).toHaveLength(32);
+  });
+
+  it("appends overflow cells for a pending model that does not fit, capped at a quarter of the strip", () => {
+    const ledger = memoryLedger(stats(), name, { label: "huge", bytes: 200 * GB });
+    const { cells } = memoryCells(ledger, 64);
+
+    const overflow = cells.filter((c) => c.kind === "overflow");
+    expect(overflow).toHaveLength(16);
+    expect(cells.slice(0, 64).some((c) => c.kind === "pending")).toBe(true);
   });
 });

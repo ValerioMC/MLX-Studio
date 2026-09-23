@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { cn } from "@/lib/utils";
 
-// Rows match the real content's height (var(--spacing-row) equivalent, h-row)
-// so nothing reflows when data arrives; a moving gradient sweep reads as
-// "loading" without demanding attention.
-withDefaults(defineProps<{ variant?: "row" | "text" | "block" }>(), { variant: "text" });
+/**
+ * Stand-in for content that is on its way. Each variant has the *shape* of
+ * the real thing — `row` is exactly the shared row height, `card` a panel —
+ * so nothing reflows when data lands. A band of light sweeps across rather
+ * than the whole block blinking, which reads as "arriving", not "broken".
+ */
+withDefaults(defineProps<{ variant?: "text" | "row" | "card" | "block" }>(), { variant: "text" });
 </script>
 
 <template>
@@ -14,10 +17,12 @@ withDefaults(defineProps<{ variant?: "row" | "text" | "block" }>(), { variant: "
     aria-busy="true"
     :class="
       cn(
-        'block animate-pulse rounded-md bg-muted',
-        variant === 'row' && 'h-row w-full',
-        variant === 'text' && 'h-3 w-full',
-        variant === 'block' && 'h-24 w-full',
+        'block bg-[length:200%_100%] [animation:sweep_1.6s_linear_infinite]',
+        'bg-[linear-gradient(90deg,rgb(var(--fg)/0.04)_0%,rgb(var(--fg)/0.04)_40%,rgb(var(--fg)/0.09)_50%,rgb(var(--fg)/0.04)_60%,rgb(var(--fg)/0.04)_100%)]',
+        variant === 'text' && 'h-3 w-full rounded-full',
+        variant === 'row' && 'h-row w-full rounded-control',
+        variant === 'card' && 'h-28 w-full rounded-card',
+        variant === 'block' && 'h-20 w-full rounded-control',
       )
     "
   >

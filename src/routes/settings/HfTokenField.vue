@@ -45,22 +45,22 @@ function onSubmit(): void {
         aria-label="Hugging Face token"
         autocomplete="off"
         spellcheck="false"
-        :class="cn(fieldClass, 'h-8 flex-1 font-mono text-xs')"
+        :class="cn(fieldClass, 'h-control flex-1 font-mono text-sm')"
       />
-      <Button type="submit" size="md" :disabled="!token.trim()" :loading="isPending && variables !== null">
+      <Button type="submit" :disabled="!token.trim()" :loading="isPending && variables !== null">
         Save
       </Button>
       <Button v-if="configured" variant="secondary" :loading="isPending && variables === null" @click="save(null)">
         Remove
       </Button>
     </form>
-    <p :class="['text-sm', isError ? 'text-destructive' : 'text-muted-foreground']">
+    <p :class="['text-sm', isError ? 'text-danger' : 'text-muted']">
       <template v-if="status">{{ status }}</template>
       <template v-else>
         Create a read token at
         <button
           type="button"
-          class="text-accent hover:underline"
+          class="font-medium text-accent-text hover:underline"
           @click="openExternal('https://huggingface.co/settings/tokens')"
         >
           huggingface.co/settings/tokens

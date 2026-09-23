@@ -1,20 +1,24 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { useRoute } from "vue-router";
 import { keepPreviousData, useQuery } from "@tanstack/vue-query";
-import { Search, X } from "lucide-vue-next";
+import { Heart, Search, TrendingUp, X } from "lucide-vue-next";
 import { api } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
 import { compactNumber } from "@/lib/format";
+import FitGauge from "@/components/instruments/FitGauge.vue";
 import ModelFacts from "@/components/models/ModelFacts.vue";
 import Button from "@/components/ui/Button.vue";
+import Callout from "@/components/ui/Callout.vue";
+import Card from "@/components/ui/Card.vue";
 import EmptyState from "@/components/ui/EmptyState.vue";
-import InlineError from "@/components/ui/InlineError.vue";
 import Kbd from "@/components/ui/Kbd.vue";
 import PageHeader from "@/components/ui/PageHeader.vue";
+import Select from "@/components/ui/Select.vue";
 import Skeleton from "@/components/ui/Skeleton.vue";
+import Spinner from "@/components/ui/Spinner.vue";
 import { fieldClass } from "@/components/ui/field";
 import Chip from "./Chip.vue";
-import FitMeter from "./FitMeter.vue";
 import ModelDetailDialog from "./ModelDetailDialog.vue";
 import DownloadButton from "./DownloadButton.vue";
 import type { CatalogModel, CatalogSort } from "@/types";
@@ -43,8 +47,11 @@ const SORT_OPTIONS: readonly { value: CatalogSort; label: string }[] = [
   { value: "recent", label: "Recently updated" },
 ];
 
-const query = ref("");
-const debouncedQuery = ref("");
+const route = useRoute();
+// The palette's "Search the catalog for …" lands here with ?q=.
+const initialQuery = typeof route.query.q === "string" ? route.query.q : "";
+const query = ref(initialQuery);
+const debouncedQuery = ref(initialQuery.trim());
 const sort = ref<CatalogSort>("downloads");
 const filters = ref<Filters>({ quant: null, vision: false, instruct: false, fitsOnly: false });
 // Paging belongs to one question: a new search or filter starts from the first page.
@@ -59,6 +66,15 @@ watch(query, (value) => {
     debouncedQuery.value = value.trim();
   }, SEARCH_DEBOUNCE_MS);
 });
+watch(
+  () => route.query.q,
+  (q) => {
+    if (typeof q === "string") {
+      query.value = q;
+      debouncedQuery.value = q.trim();
+    }
+  },
+);
 
 function onGlobalKey(event: KeyboardEvent): void {
   if (event.metaKey && event.key === "f") {
@@ -71,13 +87,7 @@ onMounted(() => window.addEventListener("keydown", onGlobalKey));
 onUnmounted(() => window.removeEventListener("keydown", onGlobalKey));
 
 const question = computed(() =>
-  JSON.stringify([
-    debouncedQuery.value,
-    sort.value,
-    filters.value.quant,
-    filters.value.vision,
-    filters.value.instruct,
-  ]),
+  JSON.stringify([debouncedQuery.value, sort.value, filters.value.quant, filters.value.vision, filters.value.instruct]),
 );
 const limit = computed(() => (page.value.question === question.value ? page.value.limit : PAGE_SIZE));
 
@@ -108,63 +118,65 @@ function toggle(patch: Partial<Filters>): void {
   filters.value = { ...filters.value, ...patch };
 }
 const mayHaveMore = computed(() => (data.value?.items.length ?? 0) >= limit.value);
+const activeFilters = computed(
+  () => Number(!!filters.value.quant) + Number(filters.value.vision) + Number(filters.value.instruct) + Number(filters.value.fitsOnly),
+);
+function clearFilters(): void {
+  filters.value = { quant: null, vision: false, instruct: false, fitsOnly: false };
+}
 </script>
 
 <template>
   <div>
-    <PageHeader title="Catalog">
-      <span class="text-sm text-muted-foreground">MLX conversions from Hugging Face</span>
-    </PageHeader>
+    <PageHeader title="Catalog" eyebrow="MLX conversions from Hugging Face, sized for this Mac" />
 
-    <div class="glass sticky top-0 z-sticky -mx-2 flex flex-col gap-2.5 px-2 pb-3">
-      <div class="relative">
-        <Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+    <!-- Sticky glass: the search and filters stay reachable while results
+         scroll underneath, still legible through the blur. -->
+    <div class="glass sticky top-titlebar z-sticky mb-5 flex flex-col gap-3 rounded-card border border-line/70 p-3 shadow-lift">
+      <div :class="cn(fieldClass, 'relative flex h-[42px] items-center gap-2.5 px-3.5')">
+        <Search class="h-4 w-4 shrink-0 text-subtle" aria-hidden="true" />
         <input
           ref="searchRef"
           v-model="query"
           placeholder="Search models, like qwen, llama or gemma"
           aria-label="Search models"
-          :class="cn(fieldClass, 'h-9 pl-8 pr-16')"
+          spellcheck="false"
+          class="h-full flex-1 bg-transparent text-md outline-none placeholder:text-subtle"
           @keydown.esc="query = ''"
         />
-        <div class="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
-          <Button v-if="query" variant="ghost" size="icon-sm" aria-label="Clear search" @click="query = ''">
-            <X />
-          </Button>
-          <Kbd v-else>⌘F</Kbd>
-        </div>
+        <Spinner v-if="isFetching && data" :size="14" class="text-accent-text" />
+        <Button v-if="query" variant="ghost" size="icon-sm" aria-label="Clear search" @click="query = ''">
+          <X />
+        </Button>
+        <Kbd v-else>⌘F</Kbd>
       </div>
 
-      <div class="flex flex-wrap items-center gap-1">
+      <div class="flex flex-wrap items-center gap-1.5">
         <Chip label="4-bit" :active="filters.quant === '4bit'" @click="toggle({ quant: filters.quant === '4bit' ? null : '4bit' })" />
         <Chip label="8-bit" :active="filters.quant === '8bit'" @click="toggle({ quant: filters.quant === '8bit' ? null : '8bit' })" />
         <Chip label="Vision" :active="filters.vision" @click="toggle({ vision: !filters.vision })" />
         <Chip label="Instruct" :active="filters.instruct" @click="toggle({ instruct: !filters.instruct })" />
-        <span aria-hidden="true" class="mx-1.5 h-4 w-px bg-border" />
+        <span aria-hidden="true" class="mx-1 h-4 w-px bg-line-strong" />
         <Chip label="Fits this Mac" :active="filters.fitsOnly" @click="toggle({ fitsOnly: !filters.fitsOnly })" />
-        <label class="ml-auto flex items-center gap-2 text-sm text-muted-foreground">
-          Sort
-          <select v-model="sort" :class="cn(fieldClass, 'h-7 w-auto pr-7 text-sm')">
-            <option v-for="o in SORT_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
-          </select>
-        </label>
+        <button v-if="activeFilters > 0" type="button" class="ml-1 text-sm text-subtle hover:text-fg" @click="clearFilters">
+          Clear
+        </button>
+        <div class="ml-auto w-[12.5rem]">
+          <Select v-model="sort" :options="SORT_OPTIONS" label="Sort" size="sm" />
+        </div>
       </div>
     </div>
 
-    <InlineError v-if="isError" class="mb-4 flex items-center justify-between gap-4">
-      <span>Could not reach Hugging Face: {{ error?.message }}</span>
-      <Button variant="secondary" size="sm" @click="refetch()">Try again</Button>
-    </InlineError>
+    <Callout v-if="isError" class="mb-4">
+      Could not reach Hugging Face: {{ error?.message }}
+      <template #action>
+        <Button variant="secondary" size="sm" @click="refetch()">Try again</Button>
+      </template>
+    </Callout>
 
-    <ul v-if="!data && isFetching" class="divide-y border-y" aria-busy="true">
-      <li v-for="i in 6" :key="i" class="flex items-center gap-4 py-4">
-        <div class="flex-1 space-y-2">
-          <Skeleton class="w-56" />
-          <Skeleton class="w-80" />
-        </div>
-        <Skeleton variant="block" class="h-7 w-24" />
-      </li>
-    </ul>
+    <Card v-if="!data && isFetching" class="flex flex-col gap-2 p-3" aria-busy="true">
+      <Skeleton v-for="i in 6" :key="i" variant="row" class="!h-[62px]" />
+    </Card>
 
     <EmptyState
       v-else-if="items.length === 0 && data"
@@ -177,34 +189,47 @@ const mayHaveMore = computed(() => (data.value?.items.length ?? 0) >= limit.valu
       }}
     </EmptyState>
 
-    <ul v-else :class="cn('divide-y border-y transition-opacity', isPlaceholderData && 'opacity-60')">
-      <li
-        v-for="m in items"
-        :key="m.hf_repo_id"
-        class="-mx-2 flex items-center gap-5 rounded-md px-2 py-3 transition-colors hover:bg-foreground/[0.03]"
-      >
-        <div class="min-w-0 flex-1">
-          <button
-            type="button"
-            class="max-w-full truncate text-left text-md font-medium hover:text-accent"
-            @click="detailTarget = m"
-          >
-            {{ m.display_name }}
-          </button>
-          <div class="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-sm text-muted-foreground">
-            <ModelFacts :model="m" show-instruct />
-            <span class="tabular" title="Downloads in the last 30 days">{{ compactNumber(m.downloads_30d ?? 0) }} downloads</span>
-            <span v-if="sort === 'likes'" class="tabular">{{ compactNumber(m.likes ?? 0) }} likes</span>
+    <Card v-else-if="data" :class="cn('overflow-hidden transition-opacity duration-200', isPlaceholderData && 'opacity-55')">
+      <ul class="divide-y divide-line">
+        <li
+          v-for="m in items"
+          :key="m.hf_repo_id"
+          class="group flex items-center gap-6 px-4 py-3.5 transition-colors duration-150 hover:bg-fg/[0.025]"
+        >
+          <div class="min-w-0 flex-1">
+            <button
+              type="button"
+              class="max-w-full truncate text-left text-md font-semibold transition-colors group-hover:text-accent-text"
+              @click="detailTarget = m"
+            >
+              {{ m.display_name }}
+            </button>
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-sm text-muted">
+              <ModelFacts :model="m" show-instruct />
+              <span class="tabular inline-flex items-center gap-1" title="Downloads in the last 30 days">
+                <TrendingUp class="h-3 w-3 text-subtle" aria-hidden="true" />
+                {{ compactNumber(m.downloads_30d ?? 0) }}
+              </span>
+              <span v-if="m.likes" class="tabular inline-flex items-center gap-1">
+                <Heart class="h-3 w-3 text-subtle" aria-hidden="true" />
+                {{ compactNumber(m.likes) }}
+              </span>
+            </div>
           </div>
-        </div>
-        <FitMeter :model="m" :usable-bytes="data?.total_usable_bytes ?? 0" />
-        <div class="flex w-[9.5rem] justify-end">
-          <DownloadButton :repo-id="m.hf_repo_id" quiet />
-        </div>
-      </li>
-    </ul>
+          <FitGauge
+            :fit="m.fit ?? 'unknown'"
+            :need-bytes="m.est_ram_bytes"
+            :usable-bytes="data.total_usable_bytes"
+            :free-bytes="data.budget_bytes"
+          />
+          <div class="flex w-[8rem] justify-end">
+            <DownloadButton :repo-id="m.hf_repo_id" quiet />
+          </div>
+        </li>
+      </ul>
+    </Card>
 
-    <div v-if="mayHaveMore && items.length > 0" class="flex justify-center pt-5">
+    <div v-if="mayHaveMore && items.length > 0" class="flex justify-center pt-6">
       <Button variant="secondary" :loading="isFetching" @click="page = { question, limit: limit + PAGE_SIZE }">
         Show more
       </Button>

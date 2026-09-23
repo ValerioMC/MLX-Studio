@@ -1,120 +1,165 @@
+@import "@fontsource-variable/geist/wght.css";
+@import "@fontsource-variable/geist-mono/wght.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /*
- * Theme: Apple's own system palette (systemBlue accent, systemGray surfaces),
- * dark-first since the app is mostly glanced at from the menu bar, adaptive
- * because it should still feel native in a light Space. One accent color does
- * every job — selection, primary action, focus — on purpose: this app has too
- * few central concepts to earn a second reserved hue.
+ * MLX Studio design tokens — the only place a color, radius, shadow or size is
+ * named. Components reference these through Tailwind (tailwind.config.ts), never
+ * a raw hex or an arbitrary rounded-[13px].
  *
- * Every color is an "R G B" triple (not hsl()) so it converts losslessly from
- * Apple's own hex values, while Tailwind's alpha utilities (bg-accent/12) still
- * work through rgb(var(--x) / <alpha-value>).
+ * The mood: a precision instrument on a desk at night. The app is a local
+ * inference engine glanced at between other work, so the canvas is a deep ink
+ * room (not the macOS stock gray it used to be) and a single phosphor-lime
+ * "signal" does every job that means *here*: where you are, what you are about
+ * to do, and what is live right now. Lime rather than blue on purpose: blue is
+ * every system default, and a phosphor trace is what "powered and running"
+ * looks like on real equipment.
  *
- * Light-mode status colors are Apple's own "increased contrast" variants of
- * systemGreen/Yellow/Red, not the vivid ones: the vivid hues read fine as a
- * small dot or a bar fill, but fail text contrast on a white canvas.
+ * Colors are "R G B" triples so Tailwind's alpha utilities (bg-accent/12) work
+ * through rgb(var(--x) / <alpha-value>). Every "-soft" wash (~12%) and "-line"
+ * hairline (~28%) is derived from its base in the config with an alpha, never
+ * hand-picked, so the relationship holds if a base value ever changes.
  */
 @layer base {
   :root {
     color-scheme: dark;
-    --background: 28 28 30;
-    --sidebar: 32 32 34;
-    --card: 44 44 46;
-    --card-foreground: 245 245 247;
-    --muted: 51 51 53;
-    --foreground: 245 245 247;
-    --muted-foreground: 152 152 157;
-    --subtle: 110 110 115;
-    --border: 56 56 58;
-    --input: 72 72 74;
-    --ring: 10 132 255;
-    --accent: 10 132 255;
-    --accent-strong: 64 156 255;
-    --accent-foreground: 255 255 255;
-    --positive: 48 209 88;
-    --caution: 255 214 10;
-    --destructive: 255 69 58;
-    --destructive-foreground: 255 255 255;
 
-    /* Memory ledger: the first model shares the accent's own hue, since it is
-       the "primary" one; the rest step through Apple's teal/purple/indigo. */
-    --seg-0: 10 132 255;
-    --seg-1: 106 196 220;
-    --seg-2: 191 90 242;
-    --seg-3: 125 122 255;
-    --seg-system: 110 110 115;
-    --seg-reserve: 110 110 115;
+    /* Surfaces, darkest to lightest. Each step is a *layer* you can stand
+       things on, not a decoration. */
+    --canvas: 7 8 11; /* the room behind everything; the ambient light falls on it */
+    --surface: 13 15 20; /* a fixed pane: the rail, the chat list, a panel */
+    --raised: 19 23 32; /* something standing on a pane: a card, a row, a control */
+    --hover: 26 31 42; /* a raised thing under the pointer */
+    --line: 30 36 47; /* hairlines between things */
+    --line-strong: 45 53 68; /* hairlines that have to be found: field borders, the scrollbar */
 
-    --radius: 0.75rem;
-    --shadow-dialog: 0 2px 8px rgb(0 0 0 / 0.4), 0 32px 64px -20px rgb(0 0 0 / 0.65), 0 0 0 1px rgb(255 255 255 / 0.06);
-    --shadow-float: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px -12px rgb(0 0 0 / 0.4);
-    --shadow-glow: 0 0 24px -4px rgb(var(--accent) / 0.5);
+    /* Text: three tiers, contrast measured on --canvas / --raised. */
+    --fg: 241 244 248; /* 18.2:1 / 16.3:1 — headings, values, anything a user acts on */
+    --muted: 161 170 184; /* 8.5:1 / 7.7:1 — body copy lives here */
+    --subtle: 116 126 142; /* 4.9:1 / 4.4:1 — chrome only: counts, timestamps, key caps. Never a sentence. */
+
+    /* The signal. One job: here — selection, primary action, focus, live. */
+    --accent: 198 242 90; /* 15.5:1 on canvas */
+    --accent-strong: 218 250 132; /* hover of a filled accent surface */
+    --accent-deep: 122 158 26; /* the accent's own shadow, for depth inside a lit object */
+    --accent-ink: 23 32 0; /* text on a filled accent surface: 13:1 */
+    --accent-text: 198 242 90; /* accent used *as text* on the canvas (a link, a live label) */
+
+    /* Status. Never decorative: each means exactly one thing. */
+    --safe: 61 220 176; /* fits, installed, finished — aqua, kept clear of the lime signal */
+    --warn: 244 185 66; /* tight, slow, swapping */
+    --danger: 255 107 128; /* too big, failed, destructive */
+    --danger-ink: 43 8 14; /* text on a filled danger surface: 7.6:1 (white would be 2.8:1) */
+
+    /* Memory ledger: one hue per loaded model. The first shares the signal's
+       hue because it is usually *the* model; the rest step around the wheel
+       at similar lightness so none shouts over the others. */
+    --seg-0: 198 242 90;
+    --seg-1: 124 196 255;
+    --seg-2: 199 155 255;
+    --seg-3: 255 158 122;
+    --seg-system: 92 102 120; /* memory that is not ours: dim, not gone */
+    --seg-reserve: 92 102 120;
+
+    /* Shadow: exactly three tiers. lift = standing on a pane, modal = floating
+       above the room, glow = the one or two things that are lit. */
+    --shadow-lift: 0 1px 0 rgb(255 255 255 / 0.035) inset, 0 1px 2px rgb(0 0 0 / 0.5), 0 10px 28px -14px rgb(0 0 0 / 0.7);
+    --shadow-modal: 0 0 0 1px rgb(255 255 255 / 0.06), 0 2px 6px rgb(0 0 0 / 0.6), 0 40px 80px -24px rgb(0 0 0 / 0.85);
+    --shadow-glow: 0 0 0 1px rgb(var(--accent) / 0.35), 0 0 24px -4px rgb(var(--accent) / 0.45);
+
+    /* The room's light: warm signal from the top-left, cool from the bottom-right. */
+    --ambient-a: 0.075;
+    --ambient-b: 0.07;
+    --grain: 0.05;
   }
 
-  /* No class yet (before the theme store runs) means dark: the app is
-     dark-first, so an unstyled flash reads as "dark", never "wrong". */
+  /* Light: the same room by day. Warm paper instead of ink; the lime stays as
+     a *fill* (with ink on it) but never as text, where it fails contrast — text
+     that means "here" switches to --accent-text, a deep olive. */
   .light {
     color-scheme: light;
-    --background: 242 242 247;
-    --sidebar: 236 236 241;
-    --card: 255 255 255;
-    --card-foreground: 28 28 30;
-    --muted: 228 228 233;
-    --foreground: 28 28 30;
-    --muted-foreground: 110 110 115;
-    --subtle: 142 142 147;
-    --border: 209 209 214;
-    --input: 199 199 204;
-    --ring: 0 122 255;
-    --accent: 0 122 255;
-    --accent-strong: 51 150 255;
-    --accent-foreground: 255 255 255;
-    --positive: 36 138 61;
-    --caution: 154 103 0;
-    --destructive: 215 0 21;
-    --destructive-foreground: 255 255 255;
+    --canvas: 243 244 240;
+    --surface: 251 251 249;
+    --raised: 255 255 255;
+    --hover: 238 240 234;
+    --line: 226 228 221;
+    --line-strong: 203 206 197;
 
-    --seg-0: 0 122 255;
-    --seg-1: 48 176 199;
-    --seg-2: 175 82 222;
-    --seg-3: 88 86 214;
-    --seg-system: 142 142 147;
-    --seg-reserve: 142 142 147;
+    --fg: 16 19 24; /* 16.9:1 */
+    --muted: 71 79 92; /* 7.5:1 */
+    --subtle: 106 115 131; /* 4.3:1 — chrome only */
 
-    --shadow-dialog: 0 2px 6px rgb(0 0 0 / 0.08), 0 24px 48px -16px rgb(0 0 0 / 0.18), 0 0 0 1px rgb(0 0 0 / 0.04);
-    --shadow-float: 0 1px 2px rgb(0 0 0 / 0.06), 0 0 0 1px rgb(var(--border));
-    --shadow-glow: 0 0 24px -4px rgb(var(--accent) / 0.35);
+    --accent: 190 238 72;
+    --accent-strong: 176 226 56;
+    --accent-deep: 96 132 10;
+    --accent-ink: 23 32 0;
+    --accent-text: 74 104 0; /* 5.8:1 */
+
+    --safe: 11 122 96;
+    --warn: 148 95 0;
+    --danger: 200 36 63;
+    --danger-ink: 255 255 255; /* 5.5:1 */
+
+    --seg-0: 150 205 30;
+    --seg-1: 56 150 230;
+    --seg-2: 150 100 230;
+    --seg-3: 232 118 76;
+    --seg-system: 170 176 186;
+    --seg-reserve: 170 176 186;
+
+    --shadow-lift: 0 1px 0 rgb(255 255 255 / 0.9) inset, 0 0 0 1px rgb(var(--line)), 0 1px 2px rgb(20 24 16 / 0.05), 0 8px 20px -12px rgb(20 24 16 / 0.12);
+    --shadow-modal: 0 0 0 1px rgb(20 24 16 / 0.06), 0 2px 6px rgb(20 24 16 / 0.06), 0 32px 64px -20px rgb(20 24 16 / 0.22);
+    --shadow-glow: 0 0 0 1px rgb(var(--accent-deep) / 0.35), 0 0 20px -4px rgb(var(--accent) / 0.6);
+
+    --ambient-a: 0.16;
+    --ambient-b: 0.08;
+    --grain: 0.035;
   }
 
   * {
-    @apply border-border;
+    @apply border-line;
   }
 
+  /* 13px: Apple's own control text size. Dense on purpose — few things are
+     on screen at once, but the ones that are should read like an instrument
+     panel, not a landing page. */
   html {
     font-size: 13px;
   }
 
   body {
-    @apply bg-background font-sans text-foreground antialiased;
-    font-feature-settings: "cv11", "ss01";
+    @apply bg-canvas font-sans text-fg antialiased;
     line-height: 1.5;
     overscroll-behavior: none;
     -webkit-font-smoothing: antialiased;
-    /* A room, not a flat plane: three large, low-opacity radial washes fixed to
-       the viewport so panes scroll over them, not with them. AppShell's own
-       root stays transparent (see AppShell.vue) so this actually reaches the
-       main content area instead of being painted over. */
+    font-feature-settings: "ss01", "cv11";
+    /* A room, not a flat plane: two very large, very faint washes fixed to the
+       viewport so panes scroll over the light rather than with it. */
     background-image:
-      radial-gradient(ellipse 1000px 700px at 6% -12%, rgb(var(--accent) / 0.16), transparent 60%),
-      radial-gradient(ellipse 900px 700px at 108% 110%, rgb(var(--seg-2) / 0.11), transparent 62%),
-      radial-gradient(ellipse 700px 500px at 60% 40%, rgb(var(--seg-1) / 0.05), transparent 65%);
+      radial-gradient(ellipse 1100px 760px at -4% -14%, rgb(var(--accent) / var(--ambient-a)), transparent 62%),
+      radial-gradient(ellipse 1000px 800px at 108% 112%, rgb(var(--seg-1) / var(--ambient-b)), transparent 64%);
     background-attachment: fixed;
     /* Desktop app: text selection only where there is text worth copying. */
     -webkit-user-select: none;
     user-select: none;
+  }
+
+  /* Film grain over the whole room. Without it a dark gradient bands into
+     visible steps on a wide-gamut display; with it the light reads as air. */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    /* Below every pane (the body background is painted on the canvas, under
+       this), so it textures the room's light without ever touching text. */
+    z-index: -1;
+    opacity: var(--grain);
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 1 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    mix-blend-mode: overlay;
   }
 
   input,
@@ -126,48 +171,54 @@
     user-select: text;
   }
 
+  /* Large type pulls in, small labels never get tracked-out capitals. */
   h1,
   h2,
   h3 {
-    letter-spacing: -0.014em;
     text-wrap: balance;
   }
 
-  /* One visual definition of "this has keyboard focus", used by everything
-     focusable: no double ring, no per-component variation. */
+  /* One definition of "this has keyboard focus", for everything focusable. */
   :focus-visible {
-    outline: 2px solid rgb(var(--ring));
+    outline: 2px solid rgb(var(--accent));
     outline-offset: 2px;
-    border-radius: 4px;
+  }
+  .light :focus-visible {
+    outline-color: rgb(var(--accent-deep));
   }
 
   ::selection {
-    background: rgb(var(--accent) / 0.28);
+    background: rgb(var(--accent) / 0.3);
   }
 
+  /* Thin, inset, palette-colored: a default OS scrollbar on this canvas is
+     the tell that nothing was finished. */
   ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+    width: 11px;
+    height: 11px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    border: 3px solid transparent;
+    border: 3.5px solid transparent;
     border-radius: 999px;
-    background: rgb(var(--muted-foreground) / 0.28) padding-box;
+    background: rgb(var(--line-strong)) padding-box;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgb(var(--muted-foreground) / 0.5) padding-box;
+    background: rgb(var(--subtle)) padding-box;
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
   }
 
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
     *::after {
-      animation-duration: 0.001ms !important;
+      animation-duration: 0.01ms !important;
       animation-iteration-count: 1 !important;
-      transition-duration: 0.001ms !important;
+      transition-duration: 0.01ms !important;
     }
   }
 }
@@ -177,149 +228,322 @@
     -webkit-app-region: no-drag;
   }
 
-  /* Condensed tabular figures: the memory and speed readouts. */
-  .figure {
-    font-variant-numeric: tabular-nums;
-    letter-spacing: -0.01em;
-  }
-
+  /* Live numbers: fixed-width digits so a changing figure never jitters. */
   .tabular {
     font-variant-numeric: tabular-nums;
   }
 
-  /* Diagonal hatch, for memory that is spoken for but not by a model. */
+  /* Diagonal hatch: memory that is spoken for, but not by a model. */
   .bg-hatch {
-    background-image: repeating-linear-gradient(-45deg, rgb(var(--seg-reserve) / 0.55) 0 1px, transparent 1px 5px);
+    background-image: repeating-linear-gradient(-45deg, rgb(var(--seg-reserve) / 0.7) 0 1px, transparent 1px 4px);
   }
 
-  .shadow-dialog {
-    box-shadow: var(--shadow-dialog);
-  }
-
-  .shadow-float {
-    box-shadow: var(--shadow-float);
-  }
-
-  .shadow-glow {
-    box-shadow: var(--shadow-glow);
-  }
-
-  /* Sticky headers: translucent over the ambient background instead of a flat bar. */
+  /*
+   * Glass: a pane that sits *in* the room's light rather than blocking it.
+   * Used for fixed chrome (the rail, sticky bars, the composer dock) so
+   * whatever scrolls under it stays legibly present.
+   */
   .glass {
-    background: rgb(var(--background) / 0.85);
-    backdrop-filter: blur(12px) saturate(1.5);
-    -webkit-backdrop-filter: blur(12px) saturate(1.5);
+    background: rgb(var(--surface) / 0.72);
+    backdrop-filter: blur(20px) saturate(1.6);
+    -webkit-backdrop-filter: blur(20px) saturate(1.6);
   }
 
-  /* A <TransitionGroup> row needs its leaving item to lift out of flow so its
-     neighbors can animate into place instead of jumping. */
+  /*
+   * A panel's lit top edge: a one-pixel highlight that fades out toward the
+   * sides, as if the room's light caught the bevel. It is what makes a dark
+   * card read as an object instead of a rectangle drawn on the canvas.
+   */
+  .edge-lit {
+    position: relative;
+  }
+  .edge-lit::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 1px;
+    border-radius: inherit;
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.1) 30%, rgb(255 255 255 / 0.1) 70%, transparent);
+    pointer-events: none;
+  }
+  .light .edge-lit::before {
+    background: none;
+  }
+
+  /*
+   * The field: every input, select and textarea. Recessed rather than raised —
+   * a hairline and an inner shadow sit the value slightly *below* the surface,
+   * like a slot. Focus never stacks a second ring on the border: the hairline
+   * itself recolors and one soft halo opens around it in the same box-shadow.
+   * `--field-tint` retints a single field without duplicating the rule;
+   * aria-invalid uses exactly that, so the DOM and the paint share one truth.
+   */
+  .field {
+    border: 1px solid rgb(var(--line-strong) / 0.9);
+    background: rgb(var(--canvas) / 0.55);
+    box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.35);
+    transition:
+      border-color 140ms ease,
+      box-shadow 140ms ease,
+      background-color 140ms ease;
+  }
+  .light .field {
+    background: rgb(var(--raised));
+    box-shadow: inset 0 1px 2px rgb(20 24 16 / 0.06);
+  }
+  .field:hover:not(:disabled):not(:focus) {
+    border-color: rgb(var(--subtle) / 0.7);
+  }
+  .field:focus,
+  .field:focus-within {
+    outline: none;
+    border-color: color-mix(in srgb, var(--field-tint, rgb(var(--accent))) 64%, transparent);
+    box-shadow:
+      inset 0 1px 2px rgb(0 0 0 / 0.35),
+      0 0 0 3px color-mix(in srgb, var(--field-tint, rgb(var(--accent))) 15%, transparent);
+  }
+  .field[aria-invalid="true"] {
+    --field-tint: rgb(var(--danger));
+    border-color: rgb(var(--danger) / 0.6);
+  }
+  .light .field:focus,
+  .light .field:focus-within {
+    --field-tint: rgb(var(--accent-deep));
+  }
+
+  /* A <TransitionGroup> row that leaves has to lift out of flow, or its
+     neighbours jump instead of sliding into its place. */
   .list-leave-active {
     position: absolute;
     width: 100%;
   }
-
-  /*
-   * Shared "field" treatment for every text input, select and textarea:
-   * a hairline border and an inset shadow sit the value slightly below the
-   * surface, like a slot. Focus does not stack a second ring on top of the
-   * border — the hairline itself recolors and a soft halo opens around it in
-   * one box-shadow, so there is never a visible double outline.
-   *
-   * `--field-tint` lets one field retint to a second semantic color (e.g. a
-   * search box, or an invalid field via aria-invalid) without duplicating the
-   * whole rule.
-   */
-  .field {
-    border: 1px solid rgb(var(--input));
-    background: rgb(var(--card));
-    box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.18);
-    transition:
-      border-color 120ms ease,
-      box-shadow 120ms ease;
-  }
-  .field:focus {
-    outline: none;
-    border-color: color-mix(in srgb, var(--field-tint, rgb(var(--accent))) 62%, transparent);
-    box-shadow:
-      inset 0 1px 2px rgb(0 0 0 / 0.18),
-      0 0 0 3px color-mix(in srgb, var(--field-tint, rgb(var(--accent))) 16%, transparent);
-  }
-  .field[aria-invalid="true"] {
-    --field-tint: rgb(var(--destructive));
-  }
 }
 
-/* Motion vocabulary: one named transition per structural context, reused
-   everywhere that context occurs (see components/ui/transitions). */
-.pane-fade-enter-active,
-.pane-fade-leave-active {
+/*
+ * ─── Motion vocabulary ────────────────────────────────────────────────────
+ * One named transition per structural context, referenced everywhere that
+ * context occurs. `--ease-out` is the one curve for anything arriving: fast
+ * start, long settle — things *land*, they don't slide at constant speed.
+ */
+:root {
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* pane — a page or a region swapping its content: cross-fade + 4px drift. */
+.pane-enter-active {
   transition:
-    opacity 140ms ease,
-    transform 140ms ease;
+    opacity 200ms var(--ease-out),
+    transform 260ms var(--ease-out);
 }
-.pane-fade-enter-from,
-.pane-fade-leave-to {
+.pane-leave-active {
+  transition: opacity 90ms ease;
+}
+.pane-enter-from {
   opacity: 0;
-  transform: translateY(3px);
+  transform: translateY(4px);
 }
-
-.dialog-fade-enter-active {
-  transition: opacity 160ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-.dialog-fade-leave-active {
-  transition: opacity 120ms ease;
-}
-.dialog-fade-enter-from,
-.dialog-fade-leave-to {
+.pane-leave-to {
   opacity: 0;
 }
 
-.dialog-pop-enter-active {
-  transition: all 160ms cubic-bezier(0.16, 1, 0.3, 1);
+/* dialog — backdrop fades; the panel rises 8px and scales from .98. */
+.scrim-enter-active {
+  transition: opacity 180ms var(--ease-out);
 }
-.dialog-pop-leave-active {
-  transition: all 120ms ease;
+.scrim-leave-active {
+  transition: opacity 140ms ease;
 }
-.dialog-pop-enter-from,
-.dialog-pop-leave-to {
+.scrim-enter-from,
+.scrim-leave-to {
   opacity: 0;
-  transform: translateY(6px) scale(0.985);
+}
+.dialog-enter-active {
+  transition:
+    opacity 180ms var(--ease-out),
+    transform 240ms var(--ease-out);
+}
+.dialog-leave-active {
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+.dialog-enter-from,
+.dialog-leave-to {
+  opacity: 0;
+  transform: translateY(8px) scale(0.98);
 }
 
-.popover-pop-enter-active {
-  transition: all 140ms cubic-bezier(0.16, 1, 0.3, 1);
+/* popover — anchored, no backdrop: a smaller rise, scaled from its anchor. */
+.popover-enter-active {
+  transition:
+    opacity 140ms var(--ease-out),
+    transform 180ms var(--ease-out);
 }
-.popover-pop-leave-active {
-  transition: all 110ms ease;
+.popover-leave-active {
+  transition:
+    opacity 100ms ease,
+    transform 100ms ease;
 }
-.popover-pop-enter-from,
-.popover-pop-leave-to {
+.popover-enter-from,
+.popover-leave-to {
   opacity: 0;
-  transform: translateY(4px) scale(0.98);
+  transform: translateY(-4px) scale(0.97);
 }
 
-.list-move-enter-active,
-.list-move-leave-active,
-.list-move-move {
-  transition: all 180ms ease;
+/* list — rows entering, leaving and neighbours resettling. */
+.list-enter-active,
+.list-leave-active {
+  transition:
+    opacity 180ms var(--ease-out),
+    transform 220ms var(--ease-out);
 }
-.list-move-enter-from,
-.list-move-leave-to {
+.list-move {
+  transition: transform 260ms var(--ease-out);
+}
+.list-enter-from {
   opacity: 0;
-  transform: scale(0.96);
+  transform: translateY(6px);
+}
+.list-leave-to {
+  opacity: 0;
+  transform: scale(0.97);
 }
 
+/* toast — slides in from below the stack, leaves sideways. */
+.toast-enter-active {
+  transition:
+    opacity 200ms var(--ease-out),
+    transform 320ms var(--ease-spring);
+}
+.toast-leave-active {
+  transition:
+    opacity 160ms ease,
+    transform 200ms ease;
+  position: absolute;
+  right: 0;
+}
+.toast-move {
+  transition: transform 260ms var(--ease-out);
+}
+.toast-enter-from {
+  opacity: 0;
+  transform: translateY(14px) scale(0.96);
+}
+.toast-leave-to {
+  opacity: 0;
+  transform: translateX(24px);
+}
+
+/* crossfade — content swapped in place: opacity only, nothing moves. */
 .crossfade-enter-active,
 .crossfade-leave-active {
-  transition: opacity 100ms ease;
+  transition: opacity 110ms ease;
 }
 .crossfade-enter-from,
 .crossfade-leave-to {
   opacity: 0;
 }
 
-/* Prism token theme, tied to the app palette so code blocks match both themes
-   without a separate light/dark stylesheet swap. */
+/* swap — an icon replaced by another (copy → check): a small pop. */
+.swap-enter-active {
+  transition:
+    opacity 160ms var(--ease-out),
+    transform 260ms var(--ease-spring);
+}
+.swap-leave-active {
+  transition:
+    opacity 80ms ease,
+    transform 80ms ease;
+}
+.swap-enter-from {
+  opacity: 0;
+  transform: scale(0.4) rotate(-20deg);
+}
+.swap-leave-to {
+  opacity: 0;
+  transform: scale(0.6);
+}
+
+/* expand — a disclosure opening (reasoning, details): height via grid rows. */
+.expand-enter-active,
+.expand-leave-active {
+  transition:
+    grid-template-rows 240ms var(--ease-out),
+    opacity 200ms ease;
+}
+.expand-enter-from,
+.expand-leave-to {
+  grid-template-rows: 0fr !important;
+  opacity: 0;
+}
+
+/* One-shot feedback: the soft ring that flashes outward from whatever was
+   just copied. Cheaper than a toast and it lands where the eye already is. */
+@keyframes flash-ring {
+  from {
+    box-shadow: 0 0 0 0 rgb(var(--accent) / 0.55);
+  }
+  to {
+    box-shadow: 0 0 0 7px rgb(var(--accent) / 0);
+  }
+}
+.animate-flash-ring {
+  animation: flash-ring 520ms var(--ease-out);
+}
+
+/* Loading sweep for skeletons: a band of light passing, not a blink. */
+@keyframes sweep {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+
+/* The sheen that travels along a bar while it is *actually* moving (a
+   download in flight). It stops when the transfer stops. */
+@keyframes sheen {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+/* Thinking label: light passes through the words while the model reasons. */
+@keyframes shimmer-text {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+.shimmer-text {
+  background: linear-gradient(90deg, rgb(var(--muted)) 0%, rgb(var(--muted)) 35%, rgb(var(--fg)) 50%, rgb(var(--muted)) 65%, rgb(var(--muted)) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer-text 1.8s linear infinite;
+}
+
+/* Streaming caret at the end of a reply that is still arriving. */
+@keyframes caret {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  55%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ─── Code: Prism tokens mapped onto the palette ─────────────────────────── */
 .token.comment,
 .token.prolog,
 .token.doctype,
@@ -328,7 +552,7 @@
   font-style: italic;
 }
 .token.punctuation {
-  color: rgb(var(--muted-foreground));
+  color: rgb(var(--muted));
 }
 .token.property,
 .token.tag,
@@ -337,7 +561,7 @@
 .token.constant,
 .token.symbol,
 .token.deleted {
-  color: rgb(var(--seg-2));
+  color: rgb(var(--seg-3));
 }
 .token.selector,
 .token.attr-name,
@@ -345,7 +569,7 @@
 .token.char,
 .token.builtin,
 .token.inserted {
-  color: rgb(var(--positive));
+  color: rgb(var(--safe));
 }
 .token.operator,
 .token.entity,
@@ -356,19 +580,19 @@
 .token.atrule,
 .token.attr-value,
 .token.keyword {
-  color: rgb(var(--accent));
+  color: rgb(var(--seg-2));
 }
 .token.function,
 .token.class-name {
-  color: rgb(var(--seg-3));
+  color: rgb(var(--accent-text));
 }
 .token.regex,
 .token.important {
-  color: rgb(var(--caution));
+  color: rgb(var(--warn));
 }
 .token.important,
 .token.bold {
-  font-weight: 700;
+  font-weight: 650;
 }
 .token.italic {
   font-style: italic;

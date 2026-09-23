@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { baseUrl, getConfig } from "@/lib/api/client";
 import Dialog from "@/components/ui/Dialog.vue";
 import CopyButton from "@/components/ui/CopyButton.vue";
@@ -26,7 +26,16 @@ function rememberTab(tab: SnippetLang): void {
   }
 }
 
-defineProps<{ model: Model }>();
+/** Prism grammar for each snippet tab. */
+const TAB_LANGUAGE: Record<SnippetLang, string> = {
+  openai: "python",
+  langchain: "python",
+  java: "java",
+  rust: "rust",
+  curl: "bash",
+};
+
+const props = defineProps<{ model: Model }>();
 defineEmits<{ close: [] }>();
 
 // Remember the last language across dialogs: whoever integrates with
@@ -34,6 +43,34 @@ defineEmits<{ close: [] }>();
 const tab = ref<SnippetLang>(initialTab());
 const cfg = getConfig();
 const apiBase = `${baseUrl()}/v1`;
+const credentials = computed(() => [
+  { label: "Base URL", value: apiBase },
+  { label: "API key", value: cfg.apiKey },
+  { label: "Model", value: props.model.id },
+]);
+const snippet = computed(() => buildSnippet(tab.value, apiBase, cfg.apiKey, props.model.id));
+
+// Prism loads with the dialog, not with Overview: plain text until it arrives.
+type Highlight = (code: string, language: string) => string;
+const highlighter = ref<Highlight | null>(null);
+onMounted(async () => {
+  highlighter.value = (await import("@/components/chat/highlighter")).highlight;
+});
+const escaped = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const snippetHtml = computed(() =>
+  highlighter.value ? highlighter.value(snippet.value, TAB_LANGUAGE[tab.value]) : escaped(snippet.value),
+);
+
+// The underline slides to the selected tab, measured from the tab itself.
+const tabRefs = ref<HTMLButtonElement[]>([]);
+const underline = ref({ left: 0, width: 0 });
+async function placeUnderline(): Promise<void> {
+  await nextTick();
+  const el = tabRefs.value[SNIPPET_TABS.findIndex((t) => t.id === tab.value)];
+  if (el) underline.value = { left: el.offsetLeft, width: el.offsetWidth };
+}
+onMounted(placeUnderline);
+watch(tab, placeUnderline);
 
 function selectTab(next: SnippetLang): void {
   tab.value = next;
@@ -42,7 +79,7 @@ function selectTab(next: SnippetLang): void {
 </script>
 
 <template>
-  <Dialog :title="`Use ${model.display_name} from code`" panel-class="w-[42rem]" @close="$emit('close')">
+  <Dialog :title="`Use ${model.display_name} from code`" panel-class="w-[44rem]" @close="$emit('close')">
     <template #description>
       {{
         model.status === "running"
@@ -51,52 +88,48 @@ function selectTab(next: SnippetLang): void {
       }}
     </template>
 
-    <dl class="mb-4 grid grid-cols-[auto_1fr_auto] items-center gap-x-4 gap-y-1 rounded-lg bg-muted/60 px-3 py-2 text-sm">
-      <div class="contents">
-        <dt class="text-muted-foreground">Base URL</dt>
-        <dd class="selectable truncate font-mono text-xs">{{ apiBase }}</dd>
-        <CopyButton :text="apiBase" label="Copy base url" />
-      </div>
-      <div class="contents">
-        <dt class="text-muted-foreground">API key</dt>
-        <dd class="selectable truncate font-mono text-xs">{{ cfg.apiKey }}</dd>
-        <CopyButton :text="cfg.apiKey" label="Copy api key" />
-      </div>
-      <div class="contents">
-        <dt class="text-muted-foreground">Model</dt>
-        <dd class="selectable truncate font-mono text-xs">{{ model.id }}</dd>
-        <CopyButton :text="model.id" label="Copy model" />
+    <dl class="mb-5 divide-y divide-line overflow-hidden rounded-card border border-line bg-canvas/40">
+      <div
+        v-for="row in credentials"
+        :key="row.label"
+        class="grid h-row grid-cols-[6rem_1fr_auto] items-center gap-3 pl-3.5 pr-1.5"
+      >
+        <dt class="text-sm text-muted">{{ row.label }}</dt>
+        <dd class="selectable truncate font-mono text-sm text-fg">{{ row.value }}</dd>
+        <CopyButton :text="row.value" :label="`Copy ${row.label.toLowerCase()}`" />
       </div>
     </dl>
 
-    <div role="tablist" aria-label="Language" class="flex gap-4 border-b">
+    <div role="tablist" aria-label="Language" class="relative flex gap-5 border-b border-line">
       <button
         v-for="t in SNIPPET_TABS"
         :key="t.id"
+        ref="tabRefs"
         type="button"
         role="tab"
         :aria-selected="tab === t.id"
-        :class="
-          cn(
-            '-mb-px border-b-2 pb-2 pt-1 text-sm font-medium transition-colors',
-            tab === t.id ? 'border-accent text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
-          )
-        "
+        :class="cn('pb-2.5 pt-1 text-sm font-medium transition-colors', tab === t.id ? 'text-fg' : 'text-muted hover:text-fg')"
         @click="selectTab(t.id)"
       >
         {{ t.label }}
       </button>
+      <!-- One underline that slides between tabs, lit like the nav capsule. -->
+      <span
+        aria-hidden="true"
+        class="absolute -bottom-px h-[2px] rounded-full bg-accent shadow-[0_0_8px_rgb(var(--accent)/0.7)] transition-all duration-300 ease-out"
+        :style="{ left: `${underline.left}px`, width: `${underline.width}px` }"
+      />
     </div>
     <div role="tabpanel" class="relative mt-3">
-      <pre class="max-h-[18rem] overflow-auto rounded-lg bg-muted/60 p-3.5 font-mono text-xs leading-relaxed">{{
-        buildSnippet(tab, apiBase, cfg.apiKey, model.id)
-      }}</pre>
-      <CopyButton
-        :text="buildSnippet(tab, apiBase, cfg.apiKey, model.id)"
-        label="Copy code"
-        show-label
-        class="absolute right-2 top-2 bg-card shadow-float"
-      />
+      <!-- eslint-disable vue/no-v-html -- Prism output over a snippet built from our own config, not user markup. -->
+      <Transition name="crossfade" mode="out-in">
+        <pre
+          :key="tab"
+          class="selectable max-h-[18rem] overflow-auto rounded-card border border-line bg-canvas/60 p-4 font-mono text-[12px] leading-relaxed"
+        ><code v-html="snippetHtml" /></pre>
+      </Transition>
+      <!-- eslint-enable vue/no-v-html -->
+      <CopyButton :text="snippet" label="Copy code" show-label class="absolute right-2.5 top-2.5 bg-raised shadow-lift ring-1 ring-inset ring-line" />
     </div>
   </Dialog>
 </template>

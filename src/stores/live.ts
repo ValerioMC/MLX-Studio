@@ -11,6 +11,8 @@ import type { DownloadJob, SystemStats } from "@/types";
  */
 export const useLive = defineStore("live", () => {
   const stats = ref<SystemStats | null>(null);
+  /** The last minute of CPU readings (one per stats frame), oldest first, for the trace on Overview. */
+  const cpuHistory = ref<number[]>([]);
   /** Download jobs by id, in the order they were first seen. */
   const downloads = ref<Record<string, DownloadJob>>({});
 
@@ -37,6 +39,7 @@ export const useLive = defineStore("live", () => {
   function startFeeds(): () => void {
     const stopStats = subscribeSSE<SystemStats>("/system/stats/stream", (next) => {
       stats.value = next;
+      cpuHistory.value = appendSample(cpuHistory.value, next.cpu_percent);
     });
     const stopDownloads = subscribeSSE<DownloadJob>("/downloads/stream", receiveJob);
     return () => {
@@ -45,8 +48,16 @@ export const useLive = defineStore("live", () => {
     };
   }
 
-  return { stats, downloads, dropDownload, startFeeds };
+  return { stats, cpuHistory, downloads, dropDownload, startFeeds };
 });
+
+/** How many samples a live trace keeps: a minute at the sidecar's ~1 Hz. */
+export const HISTORY_SAMPLES = 60;
+
+/** A rolling window: the new sample appended, the oldest dropped past the limit. */
+export function appendSample(history: readonly number[], sample: number, limit = HISTORY_SAMPLES): number[] {
+  return [...history, sample].slice(-limit);
+}
 
 /** The unfinished or failed job for a repo, if any. */
 export function jobForRepo(downloads: Record<string, DownloadJob>, repoId: string): DownloadJob | undefined {

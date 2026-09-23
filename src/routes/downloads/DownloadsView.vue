@@ -7,11 +7,12 @@ import { bytes, eta, percent, speed } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useLive } from "@/stores/live";
 import { useStartDownload } from "@/routes/catalog/useStartDownload";
+import ProgressRing from "@/components/instruments/ProgressRing.vue";
 import ConfirmDialog from "@/components/ui/ConfirmDialog.vue";
 import Button from "@/components/ui/Button.vue";
+import Card from "@/components/ui/Card.vue";
 import EmptyState from "@/components/ui/EmptyState.vue";
 import PageHeader from "@/components/ui/PageHeader.vue";
-import StatusDot from "@/components/ui/StatusDot.vue";
 import type { DownloadJob, DownloadStatus } from "@/types";
 
 const ORDER: Record<DownloadStatus, number> = {
@@ -49,12 +50,12 @@ function statusLine(job: DownloadJob): string {
 }
 
 const BAR_COLOR: Record<DownloadStatus, string> = {
-  downloading: "bg-accent",
-  queued: "bg-accent",
-  paused: "bg-muted-foreground",
-  failed: "bg-destructive",
-  completed: "bg-positive",
-  canceled: "bg-muted-foreground",
+  downloading: "bg-accent shadow-[0_0_10px_rgb(var(--accent)/0.6)]",
+  queued: "bg-accent/40",
+  paused: "bg-muted",
+  failed: "bg-danger",
+  completed: "bg-safe",
+  canceled: "bg-muted",
 };
 
 const router = useRouter();
@@ -81,18 +82,19 @@ function retry(job: DownloadJob): void {
 function done(job: DownloadJob): number {
   return job.status === "completed" ? 100 : percent(job.downloaded_bytes, job.total_bytes || 1);
 }
-function statusDotTone(job: DownloadJob): "danger" | "positive" | "idle" | "accent" {
-  if (job.status === "failed") return "danger";
-  if (job.status === "completed") return "positive";
-  if (job.status === "paused") return "idle";
-  return "accent";
-}
+const inFlight = computed(() => jobs.value.filter((j) => j.status === "downloading"));
+const totalSpeed = computed(() => inFlight.value.reduce((sum, j) => sum + (j.speed_bps ?? 0), 0));
 </script>
 
 <template>
   <div>
     <PageHeader title="Downloads">
-      <Button v-if="finished.length > 0" variant="ghost" size="sm" @click="finished.forEach((j) => dismiss(j.id))">
+      <template v-if="jobs.length > 0" #eyebrow>
+        <span class="tabular">
+          {{ inFlight.length }} in progress{{ totalSpeed ? ` · ${speed(totalSpeed)} total` : "" }}
+        </span>
+      </template>
+      <Button v-if="finished.length > 0" variant="ghost" @click="finished.forEach((j) => dismiss(j.id))">
         Clear finished
       </Button>
     </PageHeader>
@@ -104,19 +106,39 @@ function statusDotTone(job: DownloadJob): "danger" | "positive" | "idle" | "acce
       </template>
     </EmptyState>
 
-    <ul v-else class="divide-y border-y">
-      <li
-        v-for="job in jobs"
-        :key="job.id"
-        class="-mx-2 flex flex-col gap-2.5 rounded-md px-2 py-4 transition-colors hover:bg-foreground/[0.03]"
-      >
-        <div class="flex items-center gap-3">
-          <StatusDot :tone="statusDotTone(job)" />
+    <Card v-else class="overflow-hidden">
+      <TransitionGroup tag="ul" name="list" class="relative divide-y divide-line">
+        <li v-for="job in jobs" :key="job.id" class="flex items-center gap-4 px-4 py-4">
+          <ProgressRing :status="job.status" :percent="done(job)" :size="40" />
           <div class="min-w-0 flex-1">
-            <p class="truncate text-md font-medium">{{ repoName(job.hf_repo_id) }}</p>
-            <p class="selectable truncate font-mono text-xs text-muted-foreground">{{ job.hf_repo_id }}</p>
+            <div class="flex items-baseline justify-between gap-4">
+              <p class="truncate text-md font-semibold capitalize">{{ repoName(job.hf_repo_id) }}</p>
+              <span class="tabular shrink-0 text-sm text-muted">
+                {{
+                  job.total_bytes ? `${bytes(job.downloaded_bytes)} of ${bytes(job.total_bytes)}` : bytes(job.downloaded_bytes)
+                }}
+              </span>
+            </div>
+            <p class="selectable truncate font-mono text-xs text-subtle">{{ job.hf_repo_id }}</p>
+            <div class="relative mt-2.5 h-1 overflow-hidden rounded-full bg-fg/[0.07]" aria-hidden="true">
+              <div
+                :class="cn('relative h-full overflow-hidden rounded-full transition-[width] duration-700 ease-out', BAR_COLOR[job.status])"
+                :style="{ width: `${Math.max(done(job), 1)}%` }"
+              >
+                <!-- The sheen runs only while bytes are arriving. -->
+                <span
+                  v-if="job.status === 'downloading'"
+                  class="absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-white/70 to-transparent [animation:sheen_1.8s_ease-in-out_infinite]"
+                />
+              </div>
+            </div>
+            <p :class="cn('truncate pt-1.5 text-sm', job.status === 'failed' ? 'text-danger' : 'text-muted')">
+              {{ statusLine(job) }}
+            </p>
           </div>
-          <div class="flex items-center gap-1">
+
+          <!-- Fixed width, so every row's progress bar ends at the same x. -->
+          <div class="flex w-[9.5rem] shrink-0 items-center justify-end gap-1 self-center">
             <Button
               v-if="job.status === 'downloading'"
               variant="ghost"
@@ -129,13 +151,13 @@ function statusDotTone(job: DownloadJob): "danger" | "positive" | "idle" | "acce
             </Button>
             <Button
               v-if="job.status === 'paused'"
-              variant="ghost"
-              size="icon"
+              variant="secondary"
+              size="sm"
               aria-label="Resume"
-              title="Resume"
               @click="control(job.id, 'resume')"
             >
-              <Play />
+              <Play class="!h-3 !w-3 fill-current" />
+              Resume
             </Button>
             <Button
               v-if="job.status === 'failed'"
@@ -147,12 +169,12 @@ function statusDotTone(job: DownloadJob): "danger" | "positive" | "idle" | "acce
               <RotateCw />
               Retry
             </Button>
-            <Button v-if="job.status === 'completed'" variant="secondary" size="sm" @click="router.push('/models')">
-              <Play />
+            <Button v-if="job.status === 'completed'" size="sm" @click="router.push('/models')">
+              <Play class="!h-3 !w-3 fill-current" />
               Start
             </Button>
             <Button
-              variant="ghost"
+              :variant="job.status === 'completed' || job.status === 'failed' ? 'ghost' : 'danger-quiet'"
               size="icon"
               :aria-label="job.status === 'completed' || job.status === 'failed' ? 'Remove from list' : 'Cancel download'"
               :title="job.status === 'completed' || job.status === 'failed' ? 'Remove from list' : 'Cancel'"
@@ -161,27 +183,9 @@ function statusDotTone(job: DownloadJob): "danger" | "positive" | "idle" | "acce
               <X />
             </Button>
           </div>
-        </div>
-        <div class="pl-[19px]">
-          <div class="h-1 overflow-hidden rounded-full bg-muted" aria-hidden="true">
-            <div
-              :class="cn('h-full rounded-full transition-[width] duration-500 ease-out', BAR_COLOR[job.status])"
-              :style="{ width: `${done(job)}%` }"
-            />
-          </div>
-          <div class="flex justify-between gap-4 pt-1.5 text-sm">
-            <span :class="cn('min-w-0 truncate', job.status === 'failed' ? 'text-destructive' : 'text-muted-foreground')">
-              {{ statusLine(job) }}
-            </span>
-            <span class="tabular shrink-0 text-muted-foreground">
-              {{
-                job.total_bytes ? `${bytes(job.downloaded_bytes)} of ${bytes(job.total_bytes)}` : bytes(job.downloaded_bytes)
-              }}
-            </span>
-          </div>
-        </div>
-      </li>
-    </ul>
+        </li>
+      </TransitionGroup>
+    </Card>
 
     <ConfirmDialog
       v-if="cancelTarget"
@@ -195,8 +199,11 @@ function statusDotTone(job: DownloadJob): "danger" | "positive" | "idle" | "acce
         }
       "
     >
-      The {{ bytes(cancelTarget.downloaded_bytes) }} downloaded so far will be deleted. Pause instead to finish it
-      later.
+      Pause instead to finish it later.
+      <template #blast>
+        Deletes the <span class="tabular font-semibold">{{ bytes(cancelTarget.downloaded_bytes) }}</span> of
+        <span class="font-mono text-xs">{{ cancelTarget.hf_repo_id }}</span> downloaded so far.
+      </template>
     </ConfirmDialog>
   </div>
 </template>

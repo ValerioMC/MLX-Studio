@@ -19,6 +19,8 @@ export const router = createRouter({
         { path: "catalog", name: "catalog", component: () => import("@/routes/catalog/CatalogView.vue") },
         { path: "downloads", name: "downloads", component: () => import("@/routes/downloads/DownloadsView.vue") },
         { path: "settings", name: "settings", component: () => import("@/routes/settings/SettingsView.vue") },
+        // The primitive gallery: not in the nav, reachable from the palette.
+        { path: "design", name: "design", component: () => import("@/routes/design/DesignView.vue") },
       ],
     },
   ],

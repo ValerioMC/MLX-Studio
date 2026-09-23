@@ -31,7 +31,7 @@ xattr -dr com.apple.quarantine "/Applications/MLX Studio.app"
 |---|---|
 | Desktop shell | Tauri 2 (Rust) |
 | Frontend | Vue 3 (Composition API) + TypeScript + Vite |
-| UI | TailwindCSS on CSS-variable tokens (light + dark, Apple's own system palette), the native San Francisco/SF Mono system stack, lucide icons |
+| UI | TailwindCSS on the app's own CSS-variable tokens (ink canvas + one lime signal, light and dark), bundled Geist / Geist Mono, custom SVG instruments, lucide icons |
 | Backend (sidecar) | Python + FastAPI |
 | AI engine | `mlx-lm` (text) + `mlx-vlm` (vision) |
 | DB | SQLite (SQLAlchemy) |
@@ -134,16 +134,20 @@ Find the API key under **Settings ▸ Local API**.
 
 ## Features
 
-- **Memory ledger**: one bar for the Mac's unified memory, split into each loaded model, macOS and apps, the 15% safety reserve and what is free for models. Large on Overview, compact in the sidebar, and a preview of where a model will land in the start dialog
-- **Overview**: free memory for models, running models (chat, use from code, stop), quick start for installed models, swap warning, recent activity
+- **Memory instruments**: the Mac's unified memory split into each loaded model, macOS and apps, the 15% safety reserve and what is free for models. A radial dial on Overview (hover an arc or its legend row to read it), a strip of per-GB cells in the sidebar, and a preview of where a model will land in the start dialog. Each model keeps one color everywhere: its arc, its cells and its status core
+- **Model cores**: every model's state (idle, loading, running, generating, stopping, error) is drawn by one animated instrument, in the rail, the lists, the palette and next to each chat reply
+- **Overview**: free memory for models, live CPU trace, disk and swap, running models (chat, use from code, stop, share of memory), quick start for installed models, swap warning, activity timeline
+- **Command palette** (⌘K): jump to any page, chat with / start / stop any model, new chat, switch appearance, search the catalog for what you typed
+- **Toasts**: outcomes that happen away from where you are looking (a model finished loading, a delete, a failure) are reported bottom-right; errors stay longer than successes
 - **Catalog**: debounced search of `mlx-community`, filters (4/8-bit, vision, instruct, fits this Mac), sort by downloads, likes or recency, a memory meter per model against this Mac's usable memory, download state per row (downloading, paused, retry, installed), model card dialog
 - **Downloads**: resumable downloads with live speed, progress and time left (SSE); pause/cancel take effect at the next file boundary; failed jobs retry in place; finished jobs can be cleared without touching the installed model
 - **Models**: start (context length and reasoning, with a live memory breakdown), stop, delete (confirmed), update; "Use from code" dialog with snippets (Python OpenAI SDK, LangChain, Java LangChain4j, Rust Rig, curl); non-chat repos (ASR, embeddings) are flagged and not startable
-- **Chat**: streaming responses batched per frame, Markdown with highlighted, copyable code; collapsible reasoning ("Thought for 4 s") for Qwen3/DeepSeek-R1 style models; copy, regenerate, tokens/sec and time to first token per reply; notice when a reply hits the token limit; conversations grouped by date, renamable, persisted; system prompt, temperature and reply length remembered across launches; image attachments (picker, paste or drop) on vision models
+- **Chat**: prompt starters on an empty chat, a filter for past chats, streaming responses batched per frame with an inline caret, Markdown with highlighted, copyable code; collapsible reasoning ("Thought for 4 s") for Qwen3/DeepSeek-R1 style models; copy, regenerate, tokens/sec and time to first token per reply; notice when a reply hits the token limit; conversations grouped by date, renamable, persisted; system prompt, temperature and reply length remembered across launches; image attachments (picker, paste or drop) on vision models
 - **Vision models**: repos with a vision tower (Qwen-VL, LLaVA, ...) load through `mlx-vlm`; the `/v1` API accepts OpenAI-style `image_url` content parts (base64 data URLs or http URLs)
 - **Settings**: theme (system, light, dark, remembered), chat defaults, API base URL/key, optional Hugging Face token, models directory, how memory fit is decided
 - **Menu bar**: an icon in the macOS menu bar shows free memory for models and each running model, with *Open chat* and *Stop* per model, plus *Open MLX Studio* and *Quit MLX Studio*. Closing the window only hides it: the app keeps serving the API from the menu bar, and the Dock icon or *Open MLX Studio* brings the window back. Quit from the menu-bar item or with ⌘Q, which also stops the engine
-- **Keyboard**: ⌘1–⌘5 switch pages, ⌘, opens Settings, ⌘N starts a new chat, ⌘F searches the catalog, Esc closes dialogs
+- **Keyboard**: ⌘K opens the command palette, ⌘1–⌘5 switch pages, ⌘, opens Settings, ⌘N starts a new chat, ⌘F searches the catalog, Esc closes dialogs
+- **Design system**: every primitive and instrument in every state, at `#/design` (or "Open the design system" in the palette)
 - **OpenAI-compatible `/v1` API**: for `curl`, the OpenAI SDK, LangChain, Continue, Cursor, etc.; supports tool/function calling (agentic clients) on models with a parseable tool format
 
 ## Process lifecycle

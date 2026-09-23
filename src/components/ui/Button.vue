@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Loader2 } from "lucide-vue-next";
 import { cn } from "@/lib/utils";
+import Spinner from "./Spinner.vue";
 
 type Variant = "primary" | "secondary" | "ghost" | "danger" | "danger-quiet";
 type Size = "sm" | "md" | "icon" | "icon-sm";
@@ -9,7 +9,7 @@ const props = withDefaults(
   defineProps<{
     variant?: Variant;
     size?: Size;
-    /** Shows a spinner in place of the icon and blocks clicks. */
+    /** Swaps the leading icon for a spinner, blocks clicks, keeps the size. */
     loading?: boolean;
     disabled?: boolean;
     type?: "button" | "submit" | "reset";
@@ -17,25 +17,31 @@ const props = withDefaults(
   { variant: "primary", size: "md", loading: false, disabled: false, type: "button" },
 );
 
+// Physical, not flat: every variant presses 1px down, and the filled ones
+// carry a lit top edge (inset highlight) so they read as keys, not stickers.
 const BASE =
-  "no-drag inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-md font-medium transition-colors duration-100 active:translate-y-px disabled:pointer-events-none disabled:opacity-45 [&_svg]:h-3.5 [&_svg]:w-3.5 [&_svg]:shrink-0";
+  "no-drag group/button relative inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-control font-medium transition-[background-color,color,box-shadow,transform,opacity] duration-150 ease-out active:translate-y-px disabled:pointer-events-none disabled:opacity-45 [&_svg]:h-[15px] [&_svg]:w-[15px] [&_svg]:shrink-0";
 
-// `danger-quiet` matters for a destructive action repeated down a list: ghost
-// at rest, red only on hover, so a column of rows isn't a column of alarms —
-// the confirm dialog is the actual guard, the button just needs to not scream.
+// `primary` is the signal color: one per view, the thing you came to do.
+// `danger-quiet` is for a destructive action repeated down a list — ghost at
+// rest, red only on hover — so a column of rows isn't a column of alarms. The
+// confirm dialog is the real guard; the button only has to not scream.
 const VARIANTS: Record<Variant, string> = {
-  primary: "bg-accent text-accent-foreground hover:bg-accent-strong",
-  secondary: "bg-card text-foreground shadow-float hover:bg-muted",
-  ghost: "text-muted-foreground hover:bg-muted hover:text-foreground",
-  danger: "bg-destructive text-destructive-foreground hover:brightness-110",
-  "danger-quiet": "text-muted-foreground hover:bg-destructive/12 hover:text-destructive",
+  primary:
+    "bg-accent text-accent-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.45),0_1px_2px_rgb(0_0_0/0.35),0_0_0_1px_rgb(var(--accent-deep)/0.6)] hover:bg-accent-strong hover:shadow-[inset_0_1px_0_rgb(255_255_255/0.5),0_0_0_1px_rgb(var(--accent-deep)/0.6),0_0_20px_-4px_rgb(var(--accent)/0.55)]",
+  secondary:
+    "bg-raised text-fg shadow-lift ring-1 ring-inset ring-line hover:bg-hover hover:ring-line-strong",
+  ghost: "text-muted hover:bg-fg/[0.06] hover:text-fg",
+  danger:
+    "bg-danger text-danger-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.3),0_1px_2px_rgb(0_0_0/0.35)] hover:brightness-110",
+  "danger-quiet": "text-muted hover:bg-danger-soft hover:text-danger",
 };
 
 const SIZES: Record<Size, string> = {
-  sm: "h-7 gap-1.5 px-2.5 text-sm",
-  md: "h-8 gap-2 px-3 text-sm",
-  icon: "h-8 w-8",
-  "icon-sm": "h-6 w-6",
+  sm: "h-control-sm gap-1.5 px-2.5 text-sm",
+  md: "h-control gap-2 px-3.5 text-base",
+  icon: "h-control w-control",
+  "icon-sm": "h-control-sm w-control-sm",
 };
 </script>
 
@@ -46,7 +52,7 @@ const SIZES: Record<Size, string> = {
     :aria-busy="loading || undefined"
     :class="cn(BASE, VARIANTS[props.variant], SIZES[props.size])"
   >
-    <Loader2 v-if="loading" class="animate-spin" aria-hidden="true" />
+    <Spinner v-if="loading" />
     <slot />
   </button>
 </template>

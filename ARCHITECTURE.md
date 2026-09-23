@@ -2,22 +2,20 @@
 
 > Local AI for Apple Silicon, made simple. A native-feeling macOS app to discover, download, run, and chat with MLX models — with an OpenAI-compatible local API.
 
-**Stack:** Tauri (Rust shell) · React + TypeScript · TailwindCSS + shadcn/ui · Python FastAPI sidecar · `mlx-lm` · SQLite
+**Stack:** Tauri (Rust shell) · Vue 3 + TypeScript · TailwindCSS on its own token system · Python FastAPI sidecar · `mlx-lm` · SQLite
 
 ---
 
 ## 0. Design philosophy
 
-MLX Studio should feel like an Apple app, not a wrapped web page. Every decision below follows a few principles:
+MLX Studio is a precision instrument for the one thing this Mac is doing that matters: running models. The visual language follows from that:
 
-- **Clarity over chrome.** One primary action per view. Generous whitespace, a single accent color, system typography (SF Pro via `-apple-system`). No gradients-for-the-sake-of-gradients.
-- **Deference.** The content (models, chat, metrics) is the UI. Controls recede until needed. Translucency/vibrancy only where macOS uses it (sidebar, title bar).
-- **Direct manipulation & immediate feedback.** Every long-running action (download, model load, generation) streams progress. Nothing blocks the UI thread.
+- **A room, not a flat plane.** A deep ink canvas lit by two faint, fixed washes of light (plus film grain so the gradients never band). Fixed chrome — the rail, the chat list, sticky bars, the composer — is glass over that light.
+- **One signal.** A single phosphor-lime accent means *here*: where you are, the primary action, focus, and anything live. Status colors (aqua safe, amber warn, rose danger) are never decorative. Every token, with its job and contrast ratio, is in `src/styles/globals.css`.
+- **Instruments, not badges.** The states users watch — a model's lifecycle, the Mac's memory, a download — are drawn by bespoke SVG instruments (`ModelCore`, `MemoryDial`, `MemoryCells`, `ProgressRing`, `FitGauge`), each one shape whose state changes, with a one-shot arrival per real transition and ambient motion only while something is actually happening.
 - **Honest system state.** RAM headroom and model fit are shown *before* the user commits, so the app never lets someone load a 70B model into 16 GB and watch it swap to death.
-- **Native conventions.** Traffic-light window controls, `⌘,` for settings, `⌘N` new chat, `⌘F` search catalog, full keyboard navigation, respects system Appearance (light/dark) and Reduce Motion.
-- **Forgiving.** Pause/resume downloads, confirm destructive deletes, never lose a conversation.
-
-Reference points for the visual language: Linear's density and motion discipline, Apple's System Settings information architecture, and Raycast's command ergonomics.
+- **Native conventions.** Traffic-light window controls, `⌘K` palette, `⌘,` settings, `⌘N` new chat, `⌘F` search catalog, full keyboard navigation, system Appearance (light/dark) and Reduce Motion respected globally.
+- **Forgiving.** Pause/resume downloads, confirm destructive actions with a concrete blast radius, never lose a conversation.
 
 ---
 
@@ -33,8 +31,8 @@ MLX Studio is a three-process desktop application coordinated by Tauri.
 │                                                                        │
 │  ┌────────────────────────┐         ┌──────────────────────────────┐  │
 │  │  WebView (WKWebView)    │  IPC    │  Tauri Core (Rust)           │  │
-│  │  React + TS frontend    │◄───────►│  - Window / menu / tray      │  │
-│  │  Tailwind + shadcn/ui   │ invoke/ │  - Sidecar lifecycle mgmt    │  │
+│  │  Vue 3 + TS frontend    │◄───────►│  - Window / menu / tray      │  │
+│  │  Tailwind + own tokens  │ invoke/ │  - Sidecar lifecycle mgmt    │  │
 │  │                         │ events  │  - Filesystem & secure store │  │
 │  └───────────┬─────────────┘         │  - Native notifications      │  │
 │              │ HTTP/SSE                │  - Auto-update (updater)     │  │
@@ -59,7 +57,7 @@ MLX Studio is a three-process desktop application coordinated by Tauri.
 
 - The **Rust/Tauri core** owns everything that must be native and trusted: window management, the macOS menu bar, notifications, secure storage of the Hugging Face token (Keychain), filesystem permissions, and — critically — the **lifecycle of the Python sidecar**. Tauri ships a ~5–10 MB binary instead of bundling Chromium (Electron), which matters for a "feels native" app.
 - The **Python FastAPI sidecar** exists because the AI stack (`mlx-lm`, `mlx`, `transformers`, `huggingface_hub`) is Python-native. Re-implementing model loading and tokenization in Rust would be a multi-year effort for no benefit. FastAPI also *is* the OpenAI-compatible server we need to expose anyway, so the same process serves both the app's internal API and external clients (e.g. a user's `curl`, Continue.dev, or an SDK pointed at `http://localhost:11535/v1`).
-- The **React frontend** talks to the sidecar over plain `localhost` HTTP + SSE, and to the Rust core via Tauri's `invoke`/event IPC. It never touches the model files or the network to Hugging Face directly.
+- The **Vue frontend** talks to the sidecar over plain `localhost` HTTP + SSE, and to the Rust core via Tauri's `invoke`/event IPC. It never touches the model files or the network to Hugging Face directly.
 
 ### 1.2 Process responsibilities
 
@@ -75,7 +73,7 @@ MLX Studio is a three-process desktop application coordinated by Tauri.
 | OpenAI-compatible API | FastAPI | `/v1/chat/completions`, `/v1/models`, etc. |
 | System metrics | FastAPI (`psutil` + Metal) | RAM, VRAM-equivalent (unified), CPU |
 | Persistence | SQLite via SQLAlchemy | Single file in app support dir |
-| UI state / chat rendering | React | TanStack Query for server state |
+| UI state / chat rendering | Vue 3 | Pinia + TanStack Query for server state |
 
 ### 1.3 Why FastAPI is bundled, and how it's secured
 
@@ -87,10 +85,10 @@ The Python runtime is packaged with **PyInstaller** (or `uv`-built standalone) i
 
 **Search → download → run → chat**, end to end:
 
-1. User searches catalog → React → `GET /catalog/search` → FastAPI queries cached HF metadata (refreshes from Hub if stale) → returns models annotated with *download size*, *estimated RAM*, *fits-your-machine?* badge.
-2. User clicks Download → `POST /downloads` → download manager starts an `huggingface_hub` snapshot download in a worker → emits progress events on SSE channel → React updates the Downloads view live.
+1. User searches catalog → Vue → `GET /catalog/search` → FastAPI queries cached HF metadata (refreshes from Hub if stale) → returns models annotated with *download size*, *estimated RAM*, *fits-your-machine?* badge.
+2. User clicks Download → `POST /downloads` → download manager starts an `huggingface_hub` snapshot download in a worker → emits progress events on SSE channel → Vue updates the Downloads view live.
 3. User clicks Start → `POST /models/{id}/start` → engine loads weights into unified memory via `mlx_lm.load()` → status flips to *running*, exposed on the OpenAI API.
-4. User chats → React opens SSE stream `POST /v1/chat/completions` (stream=true) → tokens render incrementally with Markdown + syntax highlighting.
+4. User chats → Vue opens SSE stream `POST /v1/chat/completions` (stream=true) → tokens render incrementally with Markdown + syntax highlighting.
 
 ---
 
@@ -121,34 +119,27 @@ mlx-studio/
 │     ├─ commands.rs             # #[tauri::command] handlers
 │     └─ updater.rs
 │
-├─ src/                          # React + TypeScript frontend
-│  ├─ main.tsx
-│  ├─ App.tsx
-│  ├─ routes/                    # one folder per top-level section
-│  │  ├─ dashboard/
-│  │  ├─ catalog/
-│  │  ├─ downloads/
-│  │  ├─ models/
-│  │  ├─ chat/
-│  │  └─ settings/
+├─ src/                          # Vue 3 + TypeScript frontend
+│  ├─ main.ts / App.vue
+│  ├─ router/                    # hash router; every page but Overview is its own chunk
+│  ├─ routes/                    # one folder per page (dashboard, catalog, downloads,
+│  │                             #   models, chat, settings, design = primitive gallery)
 │  ├─ components/
-│  │  ├─ ui/                     # shadcn/ui primitives (button, dialog…)
-│  │  ├─ layout/                 # Sidebar, TitleBar, AppShell
-│  │  ├─ models/                 # ModelCard, ModelStatusBadge, RamMeter
-│  │  ├─ chat/                   # MessageList, Composer, Markdown
-│  │  └─ system/                 # MemoryLedger, ConnectionBanner
-│  ├─ lib/
-│  │  ├─ api/                    # typed client for FastAPI (openapi-gen)
-│  │  ├─ tauri/                  # invoke wrappers + event listeners
-│  │  ├─ sse.ts                  # SSE/stream helper
-│  │  ├─ format.ts               # bytes, tokens/s, durations
-│  │  └─ query.ts                # TanStack Query setup
-│  ├─ stores/                    # Zustand stores (ui, chat draft, settings)
-│  ├─ hooks/                     # useMemoryLedger, useIsDark
-│  ├─ types/                     # shared TS types (generated + hand)
-│  └─ styles/
-│     ├─ globals.css             # tailwind layers + CSS vars (themes)
-│     └─ tokens.css              # design tokens (color, spacing, radius)
+│  │  ├─ ui/                     # the closed primitive set: Button, Card, Badge, Callout,
+│  │  │                          #   Dialog, ConfirmDialog, Popover, Select, Segmented,
+│  │  │                          #   Switch, Slider, Skeleton, EmptyState, Toaster, …
+│  │  ├─ instruments/            # ModelCore, MemoryDial, MemoryCells, MemoryLegend,
+│  │  │                          #   ProgressRing, FitGauge, Sparkline
+│  │  ├─ layout/                 # AppShell, Sidebar (rail), NavRow, CommandPalette
+│  │  ├─ models/                 # Start / Connect / Logs dialogs, model actions
+│  │  ├─ chat/                   # Markdown, CodeBlock, Prism highlighter
+│  │  └─ system/                 # ConnectionBanner, segment colors
+│  ├─ composables/               # useMemoryLedger, useCoreState, useIsDark
+│  ├─ lib/                       # framework-agnostic, unit-tested: api client, SSE,
+│  │                             #   memory ledger + cells, fuzzy match, formatting
+│  ├─ stores/                    # Pinia: live (SSE), chat, preferences, ui, toast
+│  ├─ types/
+│  └─ styles/globals.css         # design tokens, motion vocabulary, Prism theme
 │
 ├─ sidecar/                      # Python FastAPI backend
 │  ├─ pyproject.toml             # managed with uv
@@ -191,7 +182,7 @@ mlx-studio/
 
 Two API surfaces share one FastAPI app:
 
-1. **Internal API** (`/catalog`, `/downloads`, `/models`, `/system`, `/conversations`) — consumed by the React frontend, authenticated with the per-launch bearer token.
+1. **Internal API** (`/catalog`, `/downloads`, `/models`, `/system`, `/conversations`) — consumed by the Vue frontend, authenticated with the per-launch bearer token.
 2. **OpenAI-compatible API** (`/v1/*`) — for the user and third-party tools, authenticated with the user's API key.
 
 Conventions: JSON, `snake_case` fields, RFC 7807-style error bodies, cursor pagination for lists, SSE for anything streaming. All times ISO-8601 UTC. Versioned under `/api/v1` internally (omitted below for brevity).
@@ -321,55 +312,32 @@ CREATE INDEX idx_activity_created     ON activity_log(created_at DESC);
 
 ---
 
-## 5. React component hierarchy
+## 5. Vue component hierarchy
 
 ```
-<App>
-└─ <QueryClientProvider>            # TanStack Query
-   └─ <ThemeProvider>               # light/dark/system → CSS vars
-      └─ <AppShell>
-         ├─ <TitleBar/>             # custom draggable region, traffic-light inset
-         ├─ <Sidebar>              # primary nav, vibrancy background
-         │  ├─ <NavItem> Overview ⌘1, Chat ⌘2, Models ⌘3, Catalog ⌘4, Downloads ⌘5 (badge: active count)
-         │  ├─ <RunningModels/>     # live status + context; click opens chat with it
-         │  ├─ <LedgerBar compact/> # unified memory at a glance
-         │  └─ <NavItem> Settings ⌘,
-         └─ <Routes>
-            ├─ <DashboardView>          # "Overview"
-            │  ├─ <FreeForModels/> <LedgerBar/> <LedgerLegend/>  # memory by model, system, reserve, free
-            │  ├─ running models (Chat / Use from code / Stop) or quick start
-            │  └─ activity
-            ├─ <CatalogView>
-            │  ├─ <SearchBar/>          # ⌘F
-            │  ├─ <FilterPanel>        # params, quant, ctx, vision, instruct
-            │  └─ <ModelGrid>
-            │     └─ <ModelCard>       # size, est RAM, fits-badge, download btn
-            │        └─ <ModelDetailSheet/>
-            ├─ <DownloadsView>
-            │  └─ <DownloadList>
-            │     └─ <DownloadRow>     # progress, speed, pause/resume/cancel
-            ├─ <ModelsView>
-            │  └─ <InstalledModelList>
-            │     └─ <ModelRow>        # start/stop/delete/update/logs
-            │        ├─ <ModelLogsDrawer/>
-            │        └─ <ConfirmDeleteDialog/>
-            ├─ <ChatView>
-            │  ├─ <ConversationSidebar> # list, new (⌘N), rename, pin, delete
-            │  └─ <ChatPane>
-            │     ├─ <ChatHeader/>      # model picker, params popover
-            │     ├─ <MessageList>
-            │     │  └─ <MessageBubble>
-            │     │     ├─ <MarkdownRenderer/>   # react-markdown + remark-gfm
-            │     │     └─ <CodeBlock/>          # shiki/prism highlight + copy
-            │     └─ <Composer/>        # textarea, send, stop-generation
-            └─ <SettingsView>
-               ├─ <SettingsSection> Models directory  (folder picker via Tauri)
-               ├─ <SettingsSection> API (port, key, CORS allowlist)
-               ├─ <SettingsSection> Appearance (theme, accent, reduce motion)
-               └─ <SettingsSection> Performance (max RAM, default ctx, kv-cache)
+<App>                                # <RouterView/>; Pinia + vue-query installed in main.ts
+└─ <AppShell>                       # keyboard map, SSE feeds, tray events
+   ├─ <Sidebar>                     # the rail: glass over the room's light
+   │  ├─ brand mark, ⌘K search trigger
+   │  ├─ <NavRow> × 5 + Settings    # selection = raised row + glowing gutter capsule
+   │  ├─ running models             # each with its <ModelCore> in its memory tone
+   │  └─ <MemoryCells compact/>     # free for models, one cell per GB
+   ├─ <RouterView>                  # "pane" transition between pages
+   │  ├─ <DashboardView>            # <MemoryDial> + <MemoryLegend> (shared hover),
+   │  │                             #   CPU/disk/swap readouts, running cards, activity timeline
+   │  ├─ <ChatView>                 # <ConversationList> (filterable), <Select> model picker,
+   │  │                             #   <Message> (core avatar, reasoning, caret), <Composer> dock
+   │  ├─ <ModelsView>               # running / installed panels, logs, connect, delete
+   │  ├─ <CatalogView>              # sticky glass search + chips + sort, <FitGauge> per row
+   │  ├─ <DownloadsView>            # <ProgressRing> + sheen bar per job
+   │  ├─ <SettingsView>             # theme tiles, chat defaults, API, token, storage, fit rule
+   │  └─ <DesignView>               # #/design: every primitive and instrument in every state
+   ├─ <CommandPalette/>             # ⌘K
+   ├─ <StartModelDialog/>           # the one Start dialog (ui.startRequest)
+   └─ <Toaster/>                    # stores/toast.ts
 ```
 
-**State strategy:** TanStack Query owns request/response server state (models, conversations, activity, catalog). What the sidecar pushes over SSE (system stats, download progress) lives in one Zustand store (`stores/live.ts`) fed by a single subscription per stream, opened by the shell and reconnecting with backoff. Zustand also holds the chat thread (so a generation survives navigation) and persisted preferences (theme, chat defaults). No Redux.
+**State strategy:** `@tanstack/vue-query` owns request/response server state (models, conversations, activity, catalog). What the sidecar pushes over SSE (system stats, download progress) lives in one Pinia store (`stores/live.ts`) fed by a single subscription per stream, opened by the shell and reconnecting with backoff; it also keeps the last minute of CPU readings for the Overview trace. Pinia also holds the chat thread (so a generation survives navigation), persisted preferences, the palette and shared Start dialog (`stores/ui.ts`), and toasts (`stores/toast.ts`). Which models are mid-start or mid-stop is read from the mutation cache (`useCoreState`), so every `ModelCore` in the app agrees.
 
 ---
 
@@ -408,7 +376,7 @@ pub fn spawn_sidecar(app: &AppHandle) -> Result<CommandChild> {
 - **Crash recovery:** Rust watches the child; on unexpected exit it restarts with exponential backoff and posts a `sidecar-restarted` event the UI can toast.
 - **Clean shutdown:** on window-close / app-quit, Rust sends `POST /shutdown` (graceful: unload models, flush DB) then kills the child if it doesn't exit within a timeout. Prevents orphaned Python processes holding GBs of unified memory.
 
-### 6.2 Tauri commands (Rust ↔ React)
+### 6.2 Tauri commands (Rust ↔ Vue)
 
 Reserved for things only the native side can do; everything else goes over HTTP to the sidecar.
 
@@ -424,7 +392,7 @@ Reserved for things only the native side can do; everything else goes over HTTP 
 
 ### 6.3 Native menus, tray, notifications, updates
 
-- **Menu bar:** standard macOS menus; `File ▸ New Chat (⌘N)`, `Edit`, `Models ▸ Start/Stop`, `View ▸ Toggle Sidebar (⌘\\)`, `Window`, `Help`. Menu actions emit events the React app handles via a global listener.
+- **Menu bar:** standard macOS menus; `File ▸ New Chat (⌘N)`, `Edit`, `Models ▸ Start/Stop`, `View ▸ Toggle Sidebar (⌘\\)`, `Window`, `Help`. Menu actions emit events the Vue app handles via a global listener.
 - **Menu-bar extra (tray):** implemented in `src-tauri/src/tray.rs`. It shows free memory for models and each running model (with *Open chat* and *Stop*), plus *Open MLX Studio* and *Quit MLX Studio*. A background thread reads `/system/stats` and `/models` every 3 s with the per-launch token. It updates the free-memory line in place and rebuilds the menu only when the running models change, so an open menu is never swapped out under the pointer. *Open chat* emits `tray:open-chat` to the frontend. Closing the window hides it, so the API keeps serving with the window closed.
 - **Notifications:** "Download complete", "Model ready", "Out of memory — load canceled".
 - **Updater:** Tauri updater with signed artifacts; sidecar binary ships inside the bundle so app + engine version together.
@@ -553,7 +521,7 @@ FastAPI handler
    ▼
 Frontend SSE reader (lib/sse.ts)
    ├─ append delta.content to the streaming assistant bubble
-   ├─ throttle React re-renders (rAF/batched) for smooth 60 fps
+   ├─ throttle Vue re-renders (rAF/batched) for smooth 60 fps
    ├─ live token/s in the bubble footer
    └─ "Stop" → AbortController → cancels fetch → server sees disconnect,
                                  stops generation, frees compute

@@ -4,7 +4,7 @@ const md = new MarkdownIt({ html: false, linkify: true, breaks: false });
 
 md.renderer.rules.image = (tokens, idx, options, _env, self) => {
   tokens[idx]?.attrSet("loading", "lazy");
-  tokens[idx]?.attrSet("class", "my-2 max-h-80 rounded-md");
+  tokens[idx]?.attrSet("class", "my-3 max-h-80 rounded-card");
   return self.renderToken(tokens, idx, options);
 };
 

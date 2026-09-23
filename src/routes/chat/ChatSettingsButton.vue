@@ -13,7 +13,7 @@ const customized = computed(() => preferences.systemPrompt.trim() !== "");
 </script>
 
 <template>
-  <Popover :open="open" label="Chat settings" @close="open = false">
+  <Popover :open="open" label="Chat settings" panel-class="w-[23rem] p-5" @close="open = false">
     <template #trigger>
       <Button
         variant="ghost"
@@ -21,13 +21,19 @@ const customized = computed(() => preferences.systemPrompt.trim() !== "");
         aria-label="Chat settings"
         :aria-expanded="open"
         title="Chat settings"
-        :class="cn('relative', open && 'bg-muted text-foreground')"
+        :class="cn('relative', open && 'bg-fg/[0.06] text-fg')"
         @click="open = !open"
       >
         <SlidersHorizontal />
-        <span v-if="customized" aria-hidden="true" class="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent" />
+        <span
+          v-if="customized"
+          aria-hidden="true"
+          title="A system prompt is set"
+          class="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_6px_rgb(var(--accent)/0.9)]"
+        />
       </Button>
     </template>
+    <h2 class="pb-3 text-md font-semibold">Chat settings</h2>
     <ChatSettingsForm />
   </Popover>
 </template>

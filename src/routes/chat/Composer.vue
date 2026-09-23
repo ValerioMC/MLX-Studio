@@ -7,7 +7,7 @@ import { imageForModel } from "@/lib/image";
 import { useChat } from "@/stores/chat";
 
 const MAX_ATTACHMENTS = 4;
-const MAX_HEIGHT_PX = 220;
+const MAX_HEIGHT_PX = 240;
 
 const props = defineProps<{ disabled: boolean; placeholder: string; canAttach: boolean }>();
 const emit = defineEmits<{ send: [text: string, images: string[]]; stop: [] }>();
@@ -88,14 +88,20 @@ function onDrop(event: DragEvent): void {
   dragging.value = false;
   void addImages(event.dataTransfer?.files ?? []);
 }
+
+defineExpose({ focus: () => textRef.value?.focus() });
 </script>
 
 <template>
+  <!-- The dock: a glass slab floating over the end of the thread. Focus lights
+       its rim in the signal color and opens a soft halo — the same focus
+       language as every field, scaled up for the one field that matters most. -->
   <div
     :class="
       cn(
-        'rounded-xl border border-input bg-card p-2 shadow-[0_1px_2px_rgb(0_0_0_/_0.12)] transition-colors focus-within:border-accent/60',
-        dragging && 'border-accent bg-accent/[0.04]',
+        'edge-lit glass rounded-card border border-line-strong/70 p-2 shadow-modal transition-[border-color,box-shadow] duration-200',
+        'focus-within:border-accent/50 focus-within:shadow-[var(--shadow-modal),0_0_0_4px_rgb(var(--accent)/0.08),0_0_40px_-10px_rgb(var(--accent)/0.35)]',
+        dragging && 'border-accent border-dashed bg-accent-soft',
         disabled && 'opacity-60',
       )
     "
@@ -103,19 +109,19 @@ function onDrop(event: DragEvent): void {
     @dragleave="dragging = false"
     @drop="onDrop"
   >
-    <ul v-if="attachments.length > 0" class="flex flex-wrap gap-2 px-1.5 pb-2 pt-1">
-      <li v-for="(src, i) in attachments" :key="i" class="relative">
-        <img :src="src" :alt="`Attachment ${i + 1}`" class="h-16 w-16 rounded-lg border object-cover" />
+    <TransitionGroup v-if="attachments.length > 0" tag="ul" name="list" class="relative flex flex-wrap gap-2 px-1.5 pb-2 pt-1">
+      <li v-for="(src, i) in attachments" :key="src" class="relative">
+        <img :src="src" :alt="`Attachment ${i + 1}`" class="h-16 w-16 rounded-control object-cover ring-1 ring-line-strong" />
         <button
           type="button"
           :aria-label="`Remove attachment ${i + 1}`"
-          class="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-background hover:bg-destructive"
+          class="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-fg text-canvas shadow-lift transition-colors hover:bg-danger hover:text-danger-ink"
           @click="attachments = attachments.filter((_, k) => k !== i)"
         >
-          <X class="h-3 w-3" />
+          <X class="h-3 w-3" :stroke-width="2.5" />
         </button>
       </li>
-    </ul>
+    </TransitionGroup>
     <div class="flex items-end gap-1.5">
       <template v-if="canAttach">
         <input ref="fileRef" type="file" accept="image/*" multiple class="hidden" @change="onFileChange" />
@@ -137,24 +143,36 @@ function onDrop(event: DragEvent): void {
         rows="1"
         aria-label="Message"
         :placeholder="placeholder"
-        class="max-h-[220px] min-h-[2rem] flex-1 resize-none bg-transparent px-2 py-1.5 text-md leading-relaxed outline-none placeholder:text-muted-foreground/70"
+        class="max-h-[240px] min-h-[32px] flex-1 resize-none bg-transparent px-2 py-[6px] text-md leading-[20px] outline-none placeholder:text-subtle"
         @keydown="onKeydown"
         @paste="onPaste"
       />
-      <Button
-        v-if="chat.busy"
-        variant="secondary"
-        size="icon"
-        aria-label="Stop generating"
-        title="Stop"
-        class="rounded-full"
-        @click="emit('stop')"
-      >
-        <Square class="fill-current" />
-      </Button>
-      <Button v-else size="icon" aria-label="Send" title="Send" :disabled="!canSend()" class="rounded-full" @click="send">
-        <ArrowUp />
-      </Button>
+      <Transition name="swap" mode="out-in">
+        <Button
+          v-if="chat.busy"
+          key="stop"
+          variant="secondary"
+          size="icon"
+          aria-label="Stop generating"
+          title="Stop"
+          class="!rounded-full"
+          @click="emit('stop')"
+        >
+          <Square class="!h-3 !w-3 fill-current" />
+        </Button>
+        <Button
+          v-else
+          key="send"
+          size="icon"
+          aria-label="Send"
+          title="Send (Enter)"
+          :disabled="!canSend()"
+          class="!rounded-full"
+          @click="send"
+        >
+          <ArrowUp :stroke-width="2.5" />
+        </Button>
+      </Transition>
     </div>
   </div>
 </template>

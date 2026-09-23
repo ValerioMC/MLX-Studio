@@ -115,3 +115,53 @@ function sum(values: readonly number[]): number {
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
+
+/** One cell of the compact memory strip: which segment fills it. */
+export interface MemoryCell {
+  readonly segmentKey: string;
+  readonly kind: SegmentKind | "overflow";
+  readonly tone?: number;
+}
+
+export interface MemoryCells {
+  readonly cells: readonly MemoryCell[];
+  /** How much memory one cell stands for. */
+  readonly cellBytes: number;
+}
+
+const GIB = 1024 ** 3;
+/** Cell sizes tried in order: the first that keeps the strip within `maxCells`. */
+const CELL_SIZES = [GIB, 2 * GIB, 4 * GIB, 8 * GIB, 16 * GIB] as const;
+
+/**
+ * The ledger quantized into equal cells (one per GB on most Macs), each taken
+ * by whichever segment covers the cell's midpoint. Memory a pending model
+ * would need beyond the total is appended as overflow cells, at most a
+ * quarter of the strip again, so a hopeless model reads as "past the end"
+ * without stretching the strip off the screen.
+ */
+export function memoryCells(ledger: MemoryLedger, maxCells = 48): MemoryCells {
+  const cellBytes = CELL_SIZES.find((size) => ledger.totalBytes / size <= maxCells) ?? CELL_SIZES[CELL_SIZES.length - 1];
+  const count = Math.max(1, Math.round(ledger.totalBytes / cellBytes));
+  const scale = ledger.totalBytes / (count * cellBytes);
+
+  const bounds: { segment: MemorySegment; end: number }[] = [];
+  let cursor = 0;
+  for (const segment of ledger.segments) {
+    cursor += segment.bytes;
+    bounds.push({ segment, end: cursor });
+  }
+
+  const cells: MemoryCell[] = [];
+  for (let i = 0; i < count; i++) {
+    const midpoint = (i + 0.5) * cellBytes * scale;
+    const hit = bounds.find((b) => midpoint < b.end) ?? bounds[bounds.length - 1];
+    if (!hit) continue;
+    cells.push({ segmentKey: hit.segment.key, kind: hit.segment.kind, tone: hit.segment.tone });
+  }
+
+  const overflowCount = Math.min(Math.ceil(ledger.overflowBytes / cellBytes), Math.ceil(count / 4));
+  for (let i = 0; i < overflowCount; i++) cells.push({ segmentKey: "overflow", kind: "overflow" });
+
+  return { cells, cellBytes };
+}
