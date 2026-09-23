@@ -20,13 +20,18 @@ const label = computed(() => props.ledger.segments.map((s) => `${s.label} ${byte
 </script>
 
 <template>
+  <!-- The one bold instrument on Overview: a gauge, not a generic progress bar.
+       A pill housing (rounded-full, however tall) with an inset track shadow
+       for depth, each segment lit from the top like a physical bevel rather
+       than a flat fill, and a soft accent glow under the housing itself so the
+       whole thing reads as lit rather than drawn. -->
   <div
     role="img"
     :aria-label="label"
     :class="
       cn(
-        'flex w-full gap-[2px] overflow-hidden rounded-[5px] bg-muted p-[2px]',
-        overflow && 'ring-1 ring-destructive',
+        'relative flex w-full gap-[2px] overflow-hidden rounded-full bg-muted p-[2px] shadow-[inset_0_1px_3px_rgb(0_0_0/0.35)] transition-shadow duration-500',
+        overflow ? 'ring-1 ring-destructive' : 'shadow-[0_0_20px_-6px_rgb(var(--accent)/0.45),inset_0_1px_3px_rgb(0_0_0/0.35)]',
         height,
       )
     "
@@ -37,12 +42,19 @@ const label = computed(() => props.ledger.segments.map((s) => `${s.label} ${byte
       :title="`${segment.label}: ${bytes(segment.bytes)}`"
       :class="
         cn(
-          'h-full min-w-[2px] rounded-[3px] transition-[flex-grow] duration-500 ease-out',
+          'relative h-full min-w-[2px] overflow-hidden rounded-full transition-[flex-grow] duration-500 ease-out',
           segmentClass(segment),
           segment.kind === 'pending' && 'animate-pulse',
         )
       "
       :style="{ flexGrow: segment.bytes, flexBasis: 0 }"
-    />
+    >
+      <!-- Top-lit sheen: the same bevel on every segment regardless of its
+           color, so the bar reads as one physical object, not N flat swatches. -->
+      <span
+        aria-hidden="true"
+        class="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/25 via-white/0 to-black/10"
+      />
+    </div>
   </div>
 </template>

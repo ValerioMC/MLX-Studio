@@ -47,6 +47,13 @@ function confirmDelete(): void {
         <h3 class="px-2 pb-1 text-xs font-medium text-muted-foreground">{{ group.group }}</h3>
         <ul class="flex flex-col gap-px">
           <li v-for="c in group.items" :key="c.id" class="group relative">
+            <!-- Same selection language as the sidebar nav: a glowing capsule in
+                 the gutter rather than a flat fill. -->
+            <span
+              v-if="c.id === chat.conversationId"
+              aria-hidden="true"
+              class="absolute -left-2 bottom-1 top-1 w-[3px] rounded-full bg-accent shadow-[0_0_7px_rgb(var(--accent)/0.85)]"
+            />
             <button
               type="button"
               :disabled="chat.busy && c.id !== chat.conversationId"
@@ -55,7 +62,7 @@ function confirmDelete(): void {
                 cn(
                   'flex h-7 w-full items-center rounded-md pl-2 pr-7 text-left text-base transition-colors disabled:opacity-50',
                   c.id === chat.conversationId
-                    ? 'bg-foreground/[0.07] text-foreground'
+                    ? 'bg-accent/[0.1] text-foreground'
                     : 'text-foreground/80 hover:bg-foreground/[0.04]',
                 )
               "

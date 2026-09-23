@@ -63,7 +63,10 @@ const fullBleed = computed(() => route.path === "/chat");
 </script>
 
 <template>
-  <div class="flex h-screen w-screen overflow-hidden bg-background text-foreground">
+  <!-- No bg-background here on purpose: the ambient wash lives on <body>, and this
+       root has to stay transparent for it to show through the main content area
+       (the sidebar paints its own opaque bg-sidebar over it). -->
+  <div class="flex h-screen w-screen overflow-hidden text-foreground">
     <Sidebar />
     <main class="relative flex min-w-0 flex-1 flex-col overflow-hidden">
       <div data-tauri-drag-region class="h-12 w-full shrink-0" />

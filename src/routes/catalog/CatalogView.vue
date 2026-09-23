@@ -178,7 +178,11 @@ const mayHaveMore = computed(() => (data.value?.items.length ?? 0) >= limit.valu
     </EmptyState>
 
     <ul v-else :class="cn('divide-y border-y transition-opacity', isPlaceholderData && 'opacity-60')">
-      <li v-for="m in items" :key="m.hf_repo_id" class="flex items-center gap-5 py-3">
+      <li
+        v-for="m in items"
+        :key="m.hf_repo_id"
+        class="-mx-2 flex items-center gap-5 rounded-md px-2 py-3 transition-colors hover:bg-foreground/[0.03]"
+      >
         <div class="min-w-0 flex-1">
           <button
             type="button"

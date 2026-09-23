@@ -98,7 +98,11 @@ function cancelDelete(): void {
     </EmptyState>
 
     <ul v-if="sorted.length > 0" class="divide-y border-y">
-      <li v-for="m in sorted" :key="m.id" class="flex items-center gap-4 py-3.5">
+      <li
+        v-for="m in sorted"
+        :key="m.id"
+        class="-mx-2 flex items-center gap-4 rounded-md px-2 py-3.5 transition-colors hover:bg-foreground/[0.03]"
+      >
         <StatusDot :tone="m.status === 'running' ? 'positive' : 'idle'" />
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2">

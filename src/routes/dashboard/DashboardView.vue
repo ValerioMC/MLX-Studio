@@ -65,7 +65,7 @@ function openChat(model: Model): void {
             </div>
           </dl>
         </div>
-        <LedgerBar :ledger="ledger" height="h-9" class="rounded-[7px] p-[3px]" />
+        <LedgerBar :ledger="ledger" height="h-9" class="p-[3px]" />
         <LedgerLegend :ledger="ledger" />
         <p v-if="live.stats.swap_used > SWAP_WARNING_BYTES" class="text-sm text-caution">
           macOS is swapping {{ bytes(live.stats.swap_used) }} to disk, so generation will be slow. Stop a model or
@@ -85,7 +85,11 @@ function openChat(model: Model): void {
         </h2>
 
         <ul v-if="running.length > 0" class="divide-y border-y">
-          <li v-for="m in running" :key="m.id" class="flex items-center gap-3 py-3">
+          <li
+            v-for="m in running"
+            :key="m.id"
+            class="-mx-2 flex items-center gap-3 rounded-md px-2 py-3 transition-colors hover:bg-foreground/[0.03]"
+          >
             <StatusDot tone="positive" />
             <div class="min-w-0 flex-1">
               <p class="truncate text-md font-medium">{{ m.display_name }}</p>
@@ -121,7 +125,11 @@ function openChat(model: Model): void {
         </ul>
 
         <ul v-if="running.length === 0 && idle.length > 0" class="divide-y border-y">
-          <li v-for="m in idle.slice(0, QUICK_START_LIMIT)" :key="m.id" class="flex items-center gap-3 py-3">
+          <li
+            v-for="m in idle.slice(0, QUICK_START_LIMIT)"
+            :key="m.id"
+            class="-mx-2 flex items-center gap-3 rounded-md px-2 py-3 transition-colors hover:bg-foreground/[0.03]"
+          >
             <StatusDot tone="idle" />
             <div class="min-w-0 flex-1">
               <p class="truncate text-md font-medium">{{ m.display_name }}</p>

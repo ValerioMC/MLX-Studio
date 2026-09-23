@@ -103,12 +103,14 @@
     line-height: 1.5;
     overscroll-behavior: none;
     -webkit-font-smoothing: antialiased;
-    /* A room, not a flat plane: two large, low-opacity radial washes fixed to
-       the viewport so panes scroll over them, not with them. Subtle enough to
-       feel lit rather than seen. */
+    /* A room, not a flat plane: three large, low-opacity radial washes fixed to
+       the viewport so panes scroll over them, not with them. AppShell's own
+       root stays transparent (see AppShell.vue) so this actually reaches the
+       main content area instead of being painted over. */
     background-image:
-      radial-gradient(ellipse 900px 600px at 8% -10%, rgb(var(--accent) / 0.08), transparent 60%),
-      radial-gradient(ellipse 800px 600px at 105% 105%, rgb(var(--seg-2) / 0.05), transparent 60%);
+      radial-gradient(ellipse 1000px 700px at 6% -12%, rgb(var(--accent) / 0.16), transparent 60%),
+      radial-gradient(ellipse 900px 700px at 108% 110%, rgb(var(--seg-2) / 0.11), transparent 62%),
+      radial-gradient(ellipse 700px 500px at 60% 40%, rgb(var(--seg-1) / 0.05), transparent 65%);
     background-attachment: fixed;
     /* Desktop app: text selection only where there is text worth copying. */
     -webkit-user-select: none;

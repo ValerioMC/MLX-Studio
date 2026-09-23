@@ -75,7 +75,7 @@ function openChat(modelId: string): void {
         title="Unified memory"
         class="flex flex-col gap-1.5 rounded-md px-2 py-2 transition-colors hover:bg-foreground/[0.04]"
       >
-        <LedgerBar :ledger="ledger" height="h-2.5" class="rounded-[4px] p-[1.5px]" />
+        <LedgerBar :ledger="ledger" height="h-2.5" class="p-[1.5px]" />
         <FreeForModels :ledger="ledger" size="compact" />
       </RouterLink>
       <NavRow :item="SETTINGS_ITEM" />

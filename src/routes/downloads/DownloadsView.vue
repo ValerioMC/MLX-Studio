@@ -105,7 +105,11 @@ function statusDotTone(job: DownloadJob): "danger" | "positive" | "idle" | "acce
     </EmptyState>
 
     <ul v-else class="divide-y border-y">
-      <li v-for="job in jobs" :key="job.id" class="flex flex-col gap-2.5 py-4">
+      <li
+        v-for="job in jobs"
+        :key="job.id"
+        class="-mx-2 flex flex-col gap-2.5 rounded-md px-2 py-4 transition-colors hover:bg-foreground/[0.03]"
+      >
         <div class="flex items-center gap-3">
           <StatusDot :tone="statusDotTone(job)" />
           <div class="min-w-0 flex-1">
