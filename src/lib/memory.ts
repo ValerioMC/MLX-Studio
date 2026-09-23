@@ -36,6 +36,17 @@ export interface PendingModel {
 /** Number of distinct model tones in the palette (see --seg-* tokens). */
 export const MODEL_TONES = 4;
 
+/**
+ * The tone the sidecar gives the next model it loads (mirrors `next_tone` in
+ * the engine): the lowest one no loaded model uses, else the one fewest share.
+ */
+export function nextTone(used: readonly number[]): number {
+  const counts = Array.from({ length: MODEL_TONES }, (_, tone) => used.filter((t) => t === tone).length);
+  const free = counts.indexOf(0);
+  if (free !== -1) return free;
+  return counts.indexOf(Math.min(...counts));
+}
+
 export function memoryLedger(
   stats: SystemStats,
   nameOf: (modelId: string) => string,
@@ -45,15 +56,18 @@ export function memoryLedger(
   const available = clamp(stats.ram_available, 0, total);
   const inUse = total - available;
 
+  // Each model keeps the tone the sidecar gave it at load; older sidecars send
+  // none, so fall back to load order.
+  const tones = stats.loaded_models.map((m, index) => m.tone ?? index % MODEL_TONES);
   const models = stats.loaded_models
-    .filter((m) => (m.est_ram_bytes ?? 0) > 0)
     .map((m, index): MemorySegment => ({
       key: `model:${m.model_id}`,
       kind: "model",
       label: nameOf(m.model_id),
       bytes: m.est_ram_bytes ?? 0,
-      tone: index % MODEL_TONES,
-    }));
+      tone: tones[index],
+    }))
+    .filter((m) => m.bytes > 0);
   const modelBytes = sum(models.map((m) => m.bytes));
   // Estimates can exceed what the OS reports in use (weights paged out, cache
   // not yet grown); never let models push past the in-use share.
@@ -79,7 +93,7 @@ export function memoryLedger(
       kind: "pending",
       label: pending.label,
       bytes: placed,
-      tone: models.length % MODEL_TONES,
+      tone: nextTone(tones),
     });
     segments.push({ key: "free", kind: "free", label: "Free", bytes: freeForModels - placed });
   } else {

@@ -61,7 +61,23 @@ class Runner:
     # Estimated resident footprint (weights + KV cache at context_length +
     # overhead), so the UI can show how unified memory is split between models.
     est_ram_bytes: int | None = None
+    # Palette slot the UI draws this model in, fixed for as long as it stays
+    # loaded so unloading another model never recolours it.
+    tone: int = 0
     loaded_at: float = field(default_factory=time.time)
+
+
+# Distinct model colours in the UI's memory ledger (the --seg-0..3 tokens).
+MODEL_TONES = 4
+
+
+def next_tone(used: list[int]) -> int:
+    """The lowest tone no loaded model uses; when all are taken, the one fewest
+    models share (lowest first on ties), so colours repeat as rarely as possible."""
+    for tone in range(MODEL_TONES):
+        if tone not in used:
+            return tone
+    return min(range(MODEL_TONES), key=lambda tone: (used.count(tone), tone))
 
 
 # Queue sentinel marking the end of a generation.
@@ -268,6 +284,7 @@ class Engine:
                 context_length,
                 enable_thinking=enable_thinking,
                 est_ram_bytes=breakdown["est_ram_bytes"] if breakdown else None,
+                tone=next_tone([r.tone for r in self._runners.values()]),
             )
             if MLX_AVAILABLE:
                 if is_vision_model(local_path):
@@ -315,6 +332,7 @@ class Engine:
                 "model_id": r.model_id,
                 "context_length": r.context_length,
                 "est_ram_bytes": r.est_ram_bytes,
+                "tone": r.tone,
                 "loaded_at": r.loaded_at,
             }
             for r in self._runners.values()

@@ -43,6 +43,8 @@ export interface LoadedModel {
   model_id: string;
   context_length: number;
   est_ram_bytes?: number | null;
+  /** Palette slot the sidecar gave this model at load; fixed while it stays loaded. */
+  tone?: number;
   loaded_at?: number;
 }
 

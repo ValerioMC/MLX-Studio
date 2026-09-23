@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { memoryLedger } from "./memory";
+import { memoryLedger, nextTone } from "./memory";
 import type { SystemStats } from "@/types";
 
 const GB = 1024 ** 3;
@@ -40,6 +40,22 @@ describe("memoryLedger", () => {
     expect(system?.bytes).toBeCloseTo(20 * GB);
   });
 
+  it("draws each model in the tone the sidecar gave it", () => {
+    const ledger = memoryLedger(
+      stats({
+        loaded_models: [
+          { model_id: "b", context_length: 4096, est_ram_bytes: 2 * GB, tone: 1 },
+          { model_id: "c", context_length: 4096, est_ram_bytes: 2 * GB, tone: 2 },
+        ],
+      }),
+      name,
+      { label: "New", bytes: GB },
+    );
+
+    expect(ledger.segments.filter((s) => s.kind === "model").map((s) => s.tone)).toEqual([1, 2]);
+    expect(ledger.segments.find((s) => s.kind === "pending")?.tone).toBe(0);
+  });
+
   it("scales model estimates down to what the OS reports in use", () => {
     const ledger = memoryLedger(
       stats({
@@ -68,5 +84,14 @@ describe("memoryLedger", () => {
 
     expect(ledger.freeForModelsBytes).toBe(0);
     expect(ledger.segments.find((s) => s.kind === "reserve")?.bytes).toBe(4 * GB);
+  });
+});
+
+describe("nextTone", () => {
+  it("takes the lowest free tone, then the least shared", () => {
+    expect(nextTone([])).toBe(0);
+    expect(nextTone([0, 2])).toBe(1);
+    expect(nextTone([0, 1, 2, 3])).toBe(0);
+    expect(nextTone([0, 1, 2, 3, 0, 1])).toBe(2);
   });
 });

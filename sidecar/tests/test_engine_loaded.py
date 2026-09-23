@@ -25,3 +25,30 @@ def test_loaded_reports_estimated_ram(tmp_path: Path, monkeypatch: pytest.Monkey
     # 1000 weight + 2*2*16*2*4*2 KV + 150 overhead.
     assert loaded["est_ram_bytes"] == 1000 + 1024 + 150
     assert loaded["context_length"] == 16
+
+
+def _model_dir(root: Path, name: str) -> str:
+    path = root / name
+    path.mkdir()
+    (path / "model.safetensors").write_bytes(b"\0" * 10)
+    return str(path)
+
+
+def test_tones_stay_fixed_while_other_models_unload(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(engine_module, "MLX_AVAILABLE", False)
+    engine = Engine()
+    for name in ("a", "b", "c"):
+        engine.load_model(name, _model_dir(tmp_path, name))
+
+    engine.unload_model("a")
+    engine.load_model("d", _model_dir(tmp_path, "d"))
+
+    tones = {m["model_id"]: m["tone"] for m in engine.loaded()}
+    assert tones == {"b": 1, "c": 2, "d": 0}
+
+
+def test_next_tone_prefers_free_then_least_shared() -> None:
+    assert engine_module.next_tone([]) == 0
+    assert engine_module.next_tone([0, 2]) == 1
+    assert engine_module.next_tone([0, 1, 2, 3]) == 0
+    assert engine_module.next_tone([0, 1, 2, 3, 0, 1]) == 2
