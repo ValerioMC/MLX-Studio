@@ -1,10 +1,10 @@
 import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
+import vue from "@vitejs/plugin-vue";
 import path from "node:path";
 
 // Tauri expects a fixed dev port and ignores Vite's own hashing of public assets.
 export default defineConfig({
-  plugins: [react()],
+  plugins: [vue()],
   resolve: {
     alias: { "@": path.resolve(__dirname, "./src") },
   },

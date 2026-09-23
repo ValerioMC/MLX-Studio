@@ -1,56 +1,29 @@
-import { PrismLight } from "react-syntax-highlighter";
-import bash from "react-syntax-highlighter/dist/esm/languages/prism/bash";
-import c from "react-syntax-highlighter/dist/esm/languages/prism/c";
-import cpp from "react-syntax-highlighter/dist/esm/languages/prism/cpp";
-import css from "react-syntax-highlighter/dist/esm/languages/prism/css";
-import diff from "react-syntax-highlighter/dist/esm/languages/prism/diff";
-import docker from "react-syntax-highlighter/dist/esm/languages/prism/docker";
-import go from "react-syntax-highlighter/dist/esm/languages/prism/go";
-import java from "react-syntax-highlighter/dist/esm/languages/prism/java";
-import javascript from "react-syntax-highlighter/dist/esm/languages/prism/javascript";
-import json from "react-syntax-highlighter/dist/esm/languages/prism/json";
-import jsx from "react-syntax-highlighter/dist/esm/languages/prism/jsx";
-import kotlin from "react-syntax-highlighter/dist/esm/languages/prism/kotlin";
-import markdown from "react-syntax-highlighter/dist/esm/languages/prism/markdown";
-import markup from "react-syntax-highlighter/dist/esm/languages/prism/markup";
-import python from "react-syntax-highlighter/dist/esm/languages/prism/python";
-import rust from "react-syntax-highlighter/dist/esm/languages/prism/rust";
-import sql from "react-syntax-highlighter/dist/esm/languages/prism/sql";
-import swift from "react-syntax-highlighter/dist/esm/languages/prism/swift";
-import toml from "react-syntax-highlighter/dist/esm/languages/prism/toml";
-import tsx from "react-syntax-highlighter/dist/esm/languages/prism/tsx";
-import typescript from "react-syntax-highlighter/dist/esm/languages/prism/typescript";
-import yaml from "react-syntax-highlighter/dist/esm/languages/prism/yaml";
+import Prism from "prismjs";
+import "prismjs/components/prism-bash";
+import "prismjs/components/prism-c";
+import "prismjs/components/prism-cpp";
+import "prismjs/components/prism-diff";
+import "prismjs/components/prism-docker";
+import "prismjs/components/prism-go";
+import "prismjs/components/prism-java";
+import "prismjs/components/prism-json";
+import "prismjs/components/prism-jsx";
+import "prismjs/components/prism-kotlin";
+import "prismjs/components/prism-markdown";
+import "prismjs/components/prism-python";
+import "prismjs/components/prism-rust";
+import "prismjs/components/prism-sql";
+import "prismjs/components/prism-swift";
+import "prismjs/components/prism-toml";
+import "prismjs/components/prism-typescript";
+import "prismjs/components/prism-tsx";
+import "prismjs/components/prism-yaml";
 
 /**
- * Prism with the languages models write most, instead of all ~300 grammars
- * (about 700 KB of the bundle). Anything else renders as plain text.
+ * Prism with the languages models write most, instead of all ~300 grammars.
+ * `javascript`, `css` and `markup` (html/xml/svg) ship in Prism's own core
+ * bundle already. Anything else renders as plain text.
  */
-const LANGUAGES: Record<string, unknown> = {
-  bash,
-  c,
-  cpp,
-  css,
-  diff,
-  docker,
-  go,
-  java,
-  javascript,
-  json,
-  jsx,
-  kotlin,
-  markdown,
-  markup,
-  python,
-  rust,
-  sql,
-  swift,
-  toml,
-  tsx,
-  typescript,
-  yaml,
-};
-
 const ALIASES: Record<string, string> = {
   sh: "bash",
   shell: "bash",
@@ -71,15 +44,23 @@ const ALIASES: Record<string, string> = {
   kt: "kotlin",
 };
 
-for (const [name, grammar] of Object.entries(LANGUAGES)) {
-  PrismLight.registerLanguage(name, grammar);
-}
-
-/** The registered grammar for a fence's language tag, or "text". */
+/** The registered grammar name for a fence's language tag, or "text". */
 export function resolveLanguage(tag: string): string {
   const lower = tag.toLowerCase();
   const name = ALIASES[lower] ?? lower;
-  return name in LANGUAGES ? name : "text";
+  return name in Prism.languages ? name : "text";
 }
 
-export const SyntaxHighlighter = PrismLight;
+/** Highlighted HTML for a code string; escaped plain text when there is no grammar. */
+export function highlight(code: string, languageTag: string): string {
+  const resolved = resolveLanguage(languageTag);
+  const grammar = Prism.languages[resolved];
+  if (!grammar) return escapeHtml(code);
+  return Prism.highlight(code, grammar, resolved);
+}
+
+const ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (c) => ESCAPES[c] ?? c);
+}

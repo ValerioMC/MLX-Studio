@@ -1,4 +1,5 @@
-import { create } from "zustand";
+import { defineStore } from "pinia";
+import { ref } from "vue";
 import type { FinishReason } from "@/lib/api/chat";
 
 export interface UIMsg {
@@ -24,49 +25,34 @@ export function messageId(): string {
   return `m${Date.now().toString(36)}${nextId}`;
 }
 
-interface ChatState {
-  messages: UIMsg[];
-  input: string;
-  model: string;
-  busy: boolean;
-  /** Persisted conversation backing the current thread; null until first exchange. */
-  conversationId: string | null;
-  /** Aborts the in-flight stream; kept here so it survives navigation. */
-  abort: (() => void) | null;
-  setInput: (value: string) => void;
-  setModel: (value: string) => void;
-  setBusy: (value: boolean) => void;
-  setConversationId: (id: string | null) => void;
-  setAbort: (fn: (() => void) | null) => void;
-  setMessages: (updater: UIMsg[] | ((prev: UIMsg[]) => UIMsg[])) => void;
-  /** Rewrites the last message (the one streaming). */
-  updateLast: (patch: (last: UIMsg) => Partial<UIMsg>) => void;
-  reset: () => void;
-}
-
 // State lives in the store (not the component) so leaving and re-entering the
 // Chat tab keeps the conversation and any in-flight generation.
-export const useChat = create<ChatState>((set) => ({
-  messages: [],
-  input: "",
-  model: "",
-  busy: false,
-  conversationId: null,
-  abort: null,
-  setInput: (input) => set({ input }),
-  setModel: (model) => set({ model }),
-  setBusy: (busy) => set({ busy }),
-  setConversationId: (conversationId) => set({ conversationId }),
-  setAbort: (abort) => set({ abort }),
-  setMessages: (updater) =>
-    set((state) => ({
-      messages: typeof updater === "function" ? updater(state.messages) : updater,
-    })),
-  updateLast: (patch) =>
-    set((state) => {
-      const last = state.messages[state.messages.length - 1];
-      if (!last) return state;
-      return { messages: [...state.messages.slice(0, -1), { ...last, ...patch(last) }] };
-    }),
-  reset: () => set({ messages: [], input: "", conversationId: null }),
-}));
+export const useChat = defineStore("chat", () => {
+  const messages = ref<UIMsg[]>([]);
+  const input = ref("");
+  const model = ref("");
+  const busy = ref(false);
+  /** Persisted conversation backing the current thread; null until first exchange. */
+  const conversationId = ref<string | null>(null);
+  /** Aborts the in-flight stream; kept here so it survives navigation. */
+  const abort = ref<(() => void) | null>(null);
+
+  function setMessages(updater: UIMsg[] | ((prev: UIMsg[]) => UIMsg[])): void {
+    messages.value = typeof updater === "function" ? updater(messages.value) : updater;
+  }
+
+  /** Rewrites the last message (the one streaming). */
+  function updateLast(patch: (last: UIMsg) => Partial<UIMsg>): void {
+    const last = messages.value[messages.value.length - 1];
+    if (!last) return;
+    messages.value = [...messages.value.slice(0, -1), { ...last, ...patch(last) }];
+  }
+
+  function reset(): void {
+    messages.value = [];
+    input.value = "";
+    conversationId.value = null;
+  }
+
+  return { messages, input, model, busy, conversationId, abort, setMessages, updateLast, reset };
+});

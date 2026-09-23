@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
@@ -14,40 +14,34 @@
     "sidecar:dev": "cd sidecar && uv run uvicorn mlxstudio.main:app --port 11535 --reload",
     "sidecar:build": "bash scripts/build-sidecar.sh",
     "lint": "eslint .",
-    "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
+    "format": "prettier --write \"src/**/*.{ts,vue,css}\"",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
-    "@fontsource-variable/instrument-sans": "^5.3.0",
-    "@fontsource-variable/jetbrains-mono": "^5.3.0",
-    "@tanstack/react-query": "^5.51.0",
+    "@tanstack/vue-query": "^5.62.7",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.0.0",
     "@tauri-apps/plugin-shell": "^2.0.0",
-    "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
-    "lucide-react": "^0.408.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-markdown": "^9.0.1",
-    "react-router-dom": "^6.25.0",
-    "react-syntax-highlighter": "^15.5.0",
-    "remark-gfm": "^4.0.0",
+    "lucide-vue-next": "^0.468.0",
+    "markdown-it": "^14.1.0",
+    "pinia": "^2.3.0",
+    "prismjs": "^1.29.0",
     "tailwind-merge": "^2.4.0",
-    "zustand": "^4.5.4"
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
     "@tauri-apps/cli": "^2.0.0",
-    "@types/react": "^18.3.3",
-    "@types/react-dom": "^18.3.0",
-    "@types/react-syntax-highlighter": "^15.5.13",
-    "@vitejs/plugin-react": "^4.3.1",
+    "@types/markdown-it": "^14.1.2",
+    "@types/prismjs": "^1.26.5",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "@vue/test-utils": "^2.4.6",
     "autoprefixer": "^10.4.19",
     "eslint": "^9.39.5",
-    "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.5.7",
+    "eslint-plugin-vue": "^9.32.0",
     "globals": "^17.12.0",
     "postcss": "^8.4.39",
     "prettier": "^3.3.3",
@@ -55,6 +49,8 @@
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.70.1",
     "vite": "^5.3.4",
-    "vitest": "^2.1.9"
+    "vitest": "^2.1.9",
+    "vue-eslint-parser": "^9.4.3",
+    "vue-tsc": "^2.1.10"
   }
 }

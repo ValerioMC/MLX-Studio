@@ -1,4 +1,4 @@
-import { QueryClient, useQuery } from "@tanstack/react-query";
+import { QueryClient, useQuery } from "@tanstack/vue-query";
 import { api } from "./client";
 import type { Activity, Conversation, MemoryEstimate, Model } from "@/types";
 

@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/vue-query";
 import { api } from "@/lib/api/client";
 import { queryClient, queryKeys } from "@/lib/api/queries";
 

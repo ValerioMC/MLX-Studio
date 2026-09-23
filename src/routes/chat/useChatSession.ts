@@ -32,14 +32,14 @@ async function persistThread(conversationId: string, thread: readonly UIMsg[]): 
 }
 
 async function ensureConversation(modelId: string): Promise<string | null> {
-  const existing = useChat.getState().conversationId;
-  if (existing) return existing;
+  const chat = useChat();
+  if (chat.conversationId) return chat.conversationId;
   try {
     const conversation = await api<Conversation>("/conversations", {
       method: "POST",
       body: JSON.stringify({ model_id: modelId }),
     });
-    useChat.getState().setConversationId(conversation.id);
+    chat.conversationId = conversation.id;
     return conversation.id;
   } catch {
     return null; // keep chatting unpersisted rather than blocking
@@ -52,10 +52,10 @@ async function ensureConversation(modelId: string): Promise<string | null> {
  * token is wasted work at 60+ tokens a second.
  */
 async function generate(modelId: string, thread: UIMsg[]): Promise<void> {
-  const chat = useChat.getState();
-  const { systemPrompt, temperature, maxTokens } = usePreferences.getState();
+  const chat = useChat();
+  const preferences = usePreferences();
   chat.setMessages([...thread, { id: messageId(), role: "assistant", content: "", streaming: true }]);
-  chat.setBusy(true);
+  chat.busy = true;
 
   const conversationId = await ensureConversation(modelId);
   let pending = "";
@@ -67,7 +67,7 @@ async function generate(modelId: string, thread: UIMsg[]): Promise<void> {
     if (!pending) return;
     const text = pending;
     pending = "";
-    useChat.getState().updateLast((last) => {
+    chat.updateLast((last) => {
       const content = last.content + text;
       if (last.thoughtMs === undefined && firstTokenAt !== null) {
         const { reasoning, thinking } = splitReasoning(content);
@@ -79,8 +79,8 @@ async function generate(modelId: string, thread: UIMsg[]): Promise<void> {
 
   const abort = streamChat(
     modelId,
-    toModelHistory(thread, systemPrompt),
-    { temperature, maxTokens },
+    toModelHistory(thread, preferences.systemPrompt),
+    { temperature: preferences.temperature, maxTokens: preferences.maxTokens },
     (token) => {
       firstTokenAt ??= Date.now();
       pending += token;
@@ -89,33 +89,37 @@ async function generate(modelId: string, thread: UIMsg[]): Promise<void> {
     (result) => {
       if (frame) cancelAnimationFrame(frame);
       flush();
-      const state = useChat.getState();
-      state.updateLast(() => ({
+      chat.updateLast(() => ({
         streaming: false,
         error: result.error,
         finishReason: result.finishReason,
         tokPerSec: result.tokPerSec,
         timeToFirstToken: result.timeToFirstToken,
       }));
-      state.setBusy(false);
-      state.setAbort(null);
-      if (conversationId && !result.error) void persistThread(conversationId, useChat.getState().messages);
+      chat.busy = false;
+      chat.abort = null;
+      if (conversationId && !result.error) void persistThread(conversationId, chat.messages);
     },
   );
-  useChat.getState().setAbort(abort);
+  chat.abort = abort;
 }
 
 export function sendMessage(modelId: string, text: string, images: string[]): void {
-  const chat = useChat.getState();
+  const chat = useChat();
   if (chat.busy || !modelId || (!text.trim() && images.length === 0)) return;
-  chat.setInput("");
-  const message: UIMsg = { id: messageId(), role: "user", content: text.trim(), images: images.length ? images : undefined };
+  chat.input = "";
+  const message: UIMsg = {
+    id: messageId(),
+    role: "user",
+    content: text.trim(),
+    images: images.length ? images : undefined,
+  };
   void generate(modelId, [...chat.messages, message]);
 }
 
 /** Answers the last question again, replacing the last answer. */
 export function regenerate(modelId: string): void {
-  const chat = useChat.getState();
+  const chat = useChat();
   if (chat.busy || !modelId) return;
   const lastUser = chat.messages.map((m) => m.role).lastIndexOf("user");
   if (lastUser === -1) return;
@@ -123,11 +127,11 @@ export function regenerate(modelId: string): void {
 }
 
 export function stopGenerating(): void {
-  useChat.getState().abort?.();
+  useChat().abort?.();
 }
 
 export async function openConversation(conversation: Conversation): Promise<void> {
-  const chat = useChat.getState();
+  const chat = useChat();
   if (chat.busy || conversation.id === chat.conversationId) return;
   const res = await api<{ items: LoadedMessage[] }>(`/conversations/${conversation.id}/messages`);
   chat.setMessages(
@@ -139,14 +143,15 @@ export async function openConversation(conversation: Conversation): Promise<void
       tokPerSec: m.tok_per_sec ?? undefined,
     })),
   );
-  chat.setConversationId(conversation.id);
-  if (conversation.model_id) chat.setModel(conversation.model_id);
+  chat.conversationId = conversation.id;
+  if (conversation.model_id) chat.model = conversation.model_id;
 }
 
 export async function deleteConversation(id: string): Promise<void> {
   await api(`/conversations/${id}`, { method: "DELETE" });
   refreshConversations();
-  if (id === useChat.getState().conversationId) useChat.getState().reset();
+  const chat = useChat();
+  if (id === chat.conversationId) chat.reset();
 }
 
 export async function renameConversation(id: string, title: string): Promise<void> {

@@ -1,75 +1,92 @@
-/* Fonts ship with the app: a desktop app must look right offline. */
-@import "@fontsource-variable/instrument-sans/standard.css";
-@import "@fontsource-variable/jetbrains-mono/index.css";
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Theme: graphite and porcelain surfaces, one cobalt accent, and a small set of
-   model tones used wherever a loaded model has to be told apart in memory.
-   Colors are HSL channels so Tailwind utilities can apply alpha. */
+/*
+ * Theme: Apple's own system palette (systemBlue accent, systemGray surfaces),
+ * dark-first since the app is mostly glanced at from the menu bar, adaptive
+ * because it should still feel native in a light Space. One accent color does
+ * every job — selection, primary action, focus — on purpose: this app has too
+ * few central concepts to earn a second reserved hue.
+ *
+ * Every color is an "R G B" triple (not hsl()) so it converts losslessly from
+ * Apple's own hex values, while Tailwind's alpha utilities (bg-accent/12) still
+ * work through rgb(var(--x) / <alpha-value>).
+ *
+ * Light-mode status colors are Apple's own "increased contrast" variants of
+ * systemGreen/Yellow/Red, not the vivid ones: the vivid hues read fine as a
+ * small dot or a bar fill, but fail text contrast on a white canvas.
+ */
 @layer base {
   :root {
-    color-scheme: light;
-    --background: 220 14% 96%;
-    --sidebar: 225 12% 92.5%;
-    --card: 0 0% 100%;
-    --card-foreground: 230 10% 10%;
-    --muted: 222 14% 92%;
-    --foreground: 230 10% 10%;
-    --muted-foreground: 226 7% 40%;
-    --border: 222 14% 86%;
-    --input: 222 12% 80%;
-    --ring: 237 65% 54%;
-    --accent: 237 65% 54%;
-    --accent-foreground: 0 0% 100%;
-    --positive: 152 70% 32%;
-    --caution: 34 80% 38%;
-    --destructive: 3 68% 50%;
-    --destructive-foreground: 0 0% 100%;
+    color-scheme: dark;
+    --background: 28 28 30;
+    --sidebar: 32 32 34;
+    --card: 44 44 46;
+    --card-foreground: 245 245 247;
+    --muted: 51 51 53;
+    --foreground: 245 245 247;
+    --muted-foreground: 152 152 157;
+    --subtle: 110 110 115;
+    --border: 56 56 58;
+    --input: 72 72 74;
+    --ring: 10 132 255;
+    --accent: 10 132 255;
+    --accent-strong: 64 156 255;
+    --accent-foreground: 255 255 255;
+    --positive: 48 209 88;
+    --caution: 255 214 10;
+    --destructive: 255 69 58;
+    --destructive-foreground: 255 255 255;
 
-    /* Memory ledger */
-    --seg-0: 237 65% 54%;
-    --seg-1: 174 62% 33%;
-    --seg-2: 300 38% 47%;
-    --seg-3: 206 60% 42%;
-    --seg-system: 225 9% 70%;
-    --seg-reserve: 225 9% 70%;
+    /* Memory ledger: the first model shares the accent's own hue, since it is
+       the "primary" one; the rest step through Apple's teal/purple/indigo. */
+    --seg-0: 10 132 255;
+    --seg-1: 106 196 220;
+    --seg-2: 191 90 242;
+    --seg-3: 125 122 255;
+    --seg-system: 110 110 115;
+    --seg-reserve: 110 110 115;
 
-    --radius: 0.625rem;
-    --shadow-dialog: 0 24px 60px -12px hsl(230 20% 10% / 0.28), 0 0 0 1px hsl(230 20% 10% / 0.08);
-    --shadow-float: 0 1px 2px hsl(230 20% 10% / 0.06), 0 0 0 1px hsl(var(--border));
+    --radius: 0.75rem;
+    --shadow-dialog: 0 2px 8px rgb(0 0 0 / 0.4), 0 32px 64px -20px rgb(0 0 0 / 0.65), 0 0 0 1px rgb(255 255 255 / 0.06);
+    --shadow-float: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px -12px rgb(0 0 0 / 0.4);
+    --shadow-glow: 0 0 24px -4px rgb(var(--accent) / 0.5);
   }
 
-  .dark {
-    color-scheme: dark;
-    --background: 228 10% 9.5%;
-    --sidebar: 230 9% 12.5%;
-    --card: 228 9% 13.5%;
-    --card-foreground: 225 12% 93%;
-    --muted: 228 8% 18%;
-    --foreground: 225 12% 93%;
-    --muted-foreground: 226 8% 62%;
-    --border: 228 8% 20%;
-    --input: 228 7% 27%;
-    --ring: 236 100% 74%;
-    --accent: 236 100% 74%;
-    --accent-foreground: 237 45% 11%;
-    --positive: 150 55% 55%;
-    --caution: 38 88% 62%;
-    --destructive: 3 85% 67%;
-    --destructive-foreground: 0 0% 100%;
+  /* No class yet (before the theme store runs) means dark: the app is
+     dark-first, so an unstyled flash reads as "dark", never "wrong". */
+  .light {
+    color-scheme: light;
+    --background: 242 242 247;
+    --sidebar: 236 236 241;
+    --card: 255 255 255;
+    --card-foreground: 28 28 30;
+    --muted: 228 228 233;
+    --foreground: 28 28 30;
+    --muted-foreground: 110 110 115;
+    --subtle: 142 142 147;
+    --border: 209 209 214;
+    --input: 199 199 204;
+    --ring: 0 122 255;
+    --accent: 0 122 255;
+    --accent-strong: 51 150 255;
+    --accent-foreground: 255 255 255;
+    --positive: 36 138 61;
+    --caution: 154 103 0;
+    --destructive: 215 0 21;
+    --destructive-foreground: 255 255 255;
 
-    --seg-0: 236 100% 74%;
-    --seg-1: 172 55% 50%;
-    --seg-2: 300 50% 72%;
-    --seg-3: 205 78% 63%;
-    --seg-system: 226 7% 40%;
-    --seg-reserve: 226 7% 40%;
+    --seg-0: 0 122 255;
+    --seg-1: 48 176 199;
+    --seg-2: 175 82 222;
+    --seg-3: 88 86 214;
+    --seg-system: 142 142 147;
+    --seg-reserve: 142 142 147;
 
-    --shadow-dialog: 0 24px 60px -12px hsl(0 0% 0% / 0.6), 0 0 0 1px hsl(0 0% 100% / 0.07);
-    --shadow-float: 0 0 0 1px hsl(var(--border));
+    --shadow-dialog: 0 2px 6px rgb(0 0 0 / 0.08), 0 24px 48px -16px rgb(0 0 0 / 0.18), 0 0 0 1px rgb(0 0 0 / 0.04);
+    --shadow-float: 0 1px 2px rgb(0 0 0 / 0.06), 0 0 0 1px rgb(var(--border));
+    --shadow-glow: 0 0 24px -4px rgb(var(--accent) / 0.35);
   }
 
   * {
@@ -83,9 +100,16 @@
   body {
     @apply bg-background font-sans text-foreground antialiased;
     font-feature-settings: "cv11", "ss01";
-    line-height: 1.45;
+    line-height: 1.5;
     overscroll-behavior: none;
     -webkit-font-smoothing: antialiased;
+    /* A room, not a flat plane: two large, low-opacity radial washes fixed to
+       the viewport so panes scroll over them, not with them. Subtle enough to
+       feel lit rather than seen. */
+    background-image:
+      radial-gradient(ellipse 900px 600px at 8% -10%, rgb(var(--accent) / 0.08), transparent 60%),
+      radial-gradient(ellipse 800px 600px at 105% 105%, rgb(var(--seg-2) / 0.05), transparent 60%);
+    background-attachment: fixed;
     /* Desktop app: text selection only where there is text worth copying. */
     -webkit-user-select: none;
     user-select: none;
@@ -103,18 +127,20 @@
   h1,
   h2,
   h3 {
-    letter-spacing: -0.012em;
+    letter-spacing: -0.014em;
     text-wrap: balance;
   }
 
+  /* One visual definition of "this has keyboard focus", used by everything
+     focusable: no double ring, no per-component variation. */
   :focus-visible {
-    outline: 2px solid hsl(var(--ring));
+    outline: 2px solid rgb(var(--ring));
     outline-offset: 2px;
     border-radius: 4px;
   }
 
   ::selection {
-    background: hsl(var(--accent) / 0.28);
+    background: rgb(var(--accent) / 0.28);
   }
 
   ::-webkit-scrollbar {
@@ -127,10 +153,10 @@
   ::-webkit-scrollbar-thumb {
     border: 3px solid transparent;
     border-radius: 999px;
-    background: hsl(var(--muted-foreground) / 0.28) padding-box;
+    background: rgb(var(--muted-foreground) / 0.28) padding-box;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--muted-foreground) / 0.5) padding-box;
+    background: rgb(var(--muted-foreground) / 0.5) padding-box;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -151,7 +177,6 @@
 
   /* Condensed tabular figures: the memory and speed readouts. */
   .figure {
-    font-stretch: 78%;
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.01em;
   }
@@ -162,11 +187,7 @@
 
   /* Diagonal hatch, for memory that is spoken for but not by a model. */
   .bg-hatch {
-    background-image: repeating-linear-gradient(
-      -45deg,
-      hsl(var(--seg-reserve) / 0.55) 0 1px,
-      transparent 1px 5px
-    );
+    background-image: repeating-linear-gradient(-45deg, rgb(var(--seg-reserve) / 0.55) 0 1px, transparent 1px 5px);
   }
 
   .shadow-dialog {
@@ -176,4 +197,177 @@
   .shadow-float {
     box-shadow: var(--shadow-float);
   }
+
+  .shadow-glow {
+    box-shadow: var(--shadow-glow);
+  }
+
+  /* Sticky headers: translucent over the ambient background instead of a flat bar. */
+  .glass {
+    background: rgb(var(--background) / 0.85);
+    backdrop-filter: blur(12px) saturate(1.5);
+    -webkit-backdrop-filter: blur(12px) saturate(1.5);
+  }
+
+  /* A <TransitionGroup> row needs its leaving item to lift out of flow so its
+     neighbors can animate into place instead of jumping. */
+  .list-leave-active {
+    position: absolute;
+    width: 100%;
+  }
+
+  /*
+   * Shared "field" treatment for every text input, select and textarea:
+   * a hairline border and an inset shadow sit the value slightly below the
+   * surface, like a slot. Focus does not stack a second ring on top of the
+   * border — the hairline itself recolors and a soft halo opens around it in
+   * one box-shadow, so there is never a visible double outline.
+   *
+   * `--field-tint` lets one field retint to a second semantic color (e.g. a
+   * search box, or an invalid field via aria-invalid) without duplicating the
+   * whole rule.
+   */
+  .field {
+    border: 1px solid rgb(var(--input));
+    background: rgb(var(--card));
+    box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.18);
+    transition:
+      border-color 120ms ease,
+      box-shadow 120ms ease;
+  }
+  .field:focus {
+    outline: none;
+    border-color: color-mix(in srgb, var(--field-tint, rgb(var(--accent))) 62%, transparent);
+    box-shadow:
+      inset 0 1px 2px rgb(0 0 0 / 0.18),
+      0 0 0 3px color-mix(in srgb, var(--field-tint, rgb(var(--accent))) 16%, transparent);
+  }
+  .field[aria-invalid="true"] {
+    --field-tint: rgb(var(--destructive));
+  }
+}
+
+/* Motion vocabulary: one named transition per structural context, reused
+   everywhere that context occurs (see components/ui/transitions). */
+.pane-fade-enter-active,
+.pane-fade-leave-active {
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+.pane-fade-enter-from,
+.pane-fade-leave-to {
+  opacity: 0;
+  transform: translateY(3px);
+}
+
+.dialog-fade-enter-active {
+  transition: opacity 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.dialog-fade-leave-active {
+  transition: opacity 120ms ease;
+}
+.dialog-fade-enter-from,
+.dialog-fade-leave-to {
+  opacity: 0;
+}
+
+.dialog-pop-enter-active {
+  transition: all 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.dialog-pop-leave-active {
+  transition: all 120ms ease;
+}
+.dialog-pop-enter-from,
+.dialog-pop-leave-to {
+  opacity: 0;
+  transform: translateY(6px) scale(0.985);
+}
+
+.popover-pop-enter-active {
+  transition: all 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.popover-pop-leave-active {
+  transition: all 110ms ease;
+}
+.popover-pop-enter-from,
+.popover-pop-leave-to {
+  opacity: 0;
+  transform: translateY(4px) scale(0.98);
+}
+
+.list-move-enter-active,
+.list-move-leave-active,
+.list-move-move {
+  transition: all 180ms ease;
+}
+.list-move-enter-from,
+.list-move-leave-to {
+  opacity: 0;
+  transform: scale(0.96);
+}
+
+.crossfade-enter-active,
+.crossfade-leave-active {
+  transition: opacity 100ms ease;
+}
+.crossfade-enter-from,
+.crossfade-leave-to {
+  opacity: 0;
+}
+
+/* Prism token theme, tied to the app palette so code blocks match both themes
+   without a separate light/dark stylesheet swap. */
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: rgb(var(--subtle));
+  font-style: italic;
+}
+.token.punctuation {
+  color: rgb(var(--muted-foreground));
+}
+.token.property,
+.token.tag,
+.token.boolean,
+.token.number,
+.token.constant,
+.token.symbol,
+.token.deleted {
+  color: rgb(var(--seg-2));
+}
+.token.selector,
+.token.attr-name,
+.token.string,
+.token.char,
+.token.builtin,
+.token.inserted {
+  color: rgb(var(--positive));
+}
+.token.operator,
+.token.entity,
+.token.url,
+.token.variable {
+  color: rgb(var(--seg-1));
+}
+.token.atrule,
+.token.attr-value,
+.token.keyword {
+  color: rgb(var(--accent));
+}
+.token.function,
+.token.class-name {
+  color: rgb(var(--seg-3));
+}
+.token.regex,
+.token.important {
+  color: rgb(var(--caution));
+}
+.token.important,
+.token.bold {
+  font-weight: 700;
+}
+.token.italic {
+  font-style: italic;
 }

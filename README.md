@@ -30,8 +30,8 @@ xattr -dr com.apple.quarantine "/Applications/MLX Studio.app"
 | Layer | Tech |
 |---|---|
 | Desktop shell | Tauri 2 (Rust) |
-| Frontend | React 18 + TypeScript + Vite |
-| UI | TailwindCSS on CSS-variable tokens (light + dark), Instrument Sans and JetBrains Mono bundled with the app, lucide icons |
+| Frontend | Vue 3 (Composition API) + TypeScript + Vite |
+| UI | TailwindCSS on CSS-variable tokens (light + dark, Apple's own system palette), the native San Francisco/SF Mono system stack, lucide icons |
 | Backend (sidecar) | Python + FastAPI |
 | AI engine | `mlx-lm` (text) + `mlx-vlm` (vision) |
 | DB | SQLite (SQLAlchemy) |
@@ -42,7 +42,7 @@ Architecture details are in [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 
 ```
 mlx-studio/
-├─ src/            React + TypeScript frontend
+├─ src/            Vue + TypeScript frontend
 ├─ src-tauri/      Rust core (window, menus, sidecar lifecycle, updater)
 ├─ sidecar/        Python FastAPI backend (catalog, downloads, engine, /v1 API)
 ├─ scripts/        build-sidecar.sh, gen-api-types.sh
@@ -86,6 +86,11 @@ pnpm tauri:build            # produces MLX Studio.app + .dmg
 
 On non-Apple-Silicon machines `pnpm sidecar:build` bundles the sidecar without
 MLX (the engine falls back to its stub).
+
+`make dmg-native` does the same build, then installs `MLX Studio.app` straight into
+`/Applications` on this machine (replacing a running copy, quitting it first). The
+`.dmg` is still what you'd hand to another machine; `MLXSTUDIO_INSTALL=0` builds it
+without installing. `make dmg` builds without installing at all.
 
 ### CI releases
 

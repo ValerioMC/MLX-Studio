@@ -1,41 +1,29 @@
-import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { defineStore } from "pinia";
+import { watch } from "vue";
+import { persistedRef } from "@/lib/persistedRef";
 
 export type Theme = "light" | "dark" | "system";
 
-interface UIState {
-  theme: Theme;
-  setTheme: (theme: Theme) => void;
-}
-
 const darkQuery = typeof window !== "undefined" ? window.matchMedia("(prefers-color-scheme: dark)") : null;
 
+/** :root is dark by default (see globals.css); ".light" opts a resolved-light theme out. */
 function applyTheme(theme: Theme): void {
-  const dark = theme === "dark" || (theme === "system" && (darkQuery?.matches ?? false));
-  document.documentElement.classList.toggle("dark", dark);
+  const dark = theme === "dark" || (theme === "system" && (darkQuery?.matches ?? true));
+  document.documentElement.classList.toggle("light", !dark);
 }
 
-export const useUI = create<UIState>()(
-  persist(
-    (set) => ({
-      theme: "system",
-      setTheme: (theme) => {
-        applyTheme(theme);
-        set({ theme });
-      },
-    }),
-    {
-      name: "mlxstudio.ui",
-      storage: createJSONStorage(() => localStorage),
-      onRehydrateStorage: () => (state) => applyTheme(state?.theme ?? "system"),
-    },
-  ),
-);
+export const useUI = defineStore("ui", () => {
+  const theme = persistedRef<Theme>("mlxstudio.ui.theme", "system");
 
-// Paint the stored theme before first render, and follow the OS while on "system".
-if (typeof window !== "undefined") {
-  applyTheme(useUI.getState().theme);
+  function setTheme(next: Theme): void {
+    theme.value = next;
+  }
+
+  // Paint the stored theme before first render, and follow the OS while on "system".
+  watch(theme, applyTheme, { immediate: true });
   darkQuery?.addEventListener("change", () => {
-    if (useUI.getState().theme === "system") applyTheme("system");
+    if (theme.value === "system") applyTheme("system");
   });
-}
+
+  return { theme, setTheme };
+});

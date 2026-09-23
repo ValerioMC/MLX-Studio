@@ -1,4 +1,5 @@
-import { create } from "zustand";
+import { defineStore } from "pinia";
+import { ref } from "vue";
 import { subscribeSSE } from "@/lib/sse";
 import { queryClient, queryKeys } from "@/lib/api/queries";
 import type { DownloadJob, SystemStats } from "@/types";
@@ -8,46 +9,44 @@ import type { DownloadJob, SystemStats } from "@/types";
  * progress. One subscription each for the whole app, opened by the shell, so
  * the sidebar, pages and dialogs all read the same numbers.
  */
-interface LiveState {
-  stats: SystemStats | null;
+export const useLive = defineStore("live", () => {
+  const stats = ref<SystemStats | null>(null);
   /** Download jobs by id, in the order they were first seen. */
-  downloads: Record<string, DownloadJob>;
-  dropDownload: (id: string) => void;
-}
+  const downloads = ref<Record<string, DownloadJob>>({});
 
-export const useLive = create<LiveState>((set) => ({
-  stats: null,
-  downloads: {},
-  dropDownload: (id) =>
-    set((state) => {
-      const { [id]: _dropped, ...rest } = state.downloads;
-      return { downloads: rest };
-    }),
-}));
-
-function receiveJob(job: DownloadJob): void {
-  const previous = useLive.getState().downloads[job.id];
-  if (job.status === "canceled") {
-    useLive.getState().dropDownload(job.id);
-    return;
+  function dropDownload(id: string): void {
+    const { [id]: _dropped, ...rest } = downloads.value;
+    downloads.value = rest;
   }
-  useLive.setState((state) => ({ downloads: { ...state.downloads, [job.id]: job } }));
-  // A finished download is a new installed model.
-  if (job.status === "completed" && previous?.status !== "completed") {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.models });
-    void queryClient.invalidateQueries({ queryKey: queryKeys.activity });
-  }
-}
 
-/** Opens both feeds; returns the function that closes them. */
-export function startLiveFeeds(): () => void {
-  const stopStats = subscribeSSE<SystemStats>("/system/stats/stream", (stats) => useLive.setState({ stats }));
-  const stopDownloads = subscribeSSE<DownloadJob>("/downloads/stream", receiveJob);
-  return () => {
-    stopStats();
-    stopDownloads();
-  };
-}
+  function receiveJob(job: DownloadJob): void {
+    const previous = downloads.value[job.id];
+    if (job.status === "canceled") {
+      dropDownload(job.id);
+      return;
+    }
+    downloads.value = { ...downloads.value, [job.id]: job };
+    // A finished download is a new installed model.
+    if (job.status === "completed" && previous?.status !== "completed") {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.models });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.activity });
+    }
+  }
+
+  /** Opens both feeds; returns the function that closes them. */
+  function startFeeds(): () => void {
+    const stopStats = subscribeSSE<SystemStats>("/system/stats/stream", (next) => {
+      stats.value = next;
+    });
+    const stopDownloads = subscribeSSE<DownloadJob>("/downloads/stream", receiveJob);
+    return () => {
+      stopStats();
+      stopDownloads();
+    };
+  }
+
+  return { stats, downloads, dropDownload, startFeeds };
+});
 
 /** The unfinished or failed job for a repo, if any. */
 export function jobForRepo(downloads: Record<string, DownloadJob>, repoId: string): DownloadJob | undefined {
