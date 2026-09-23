@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import estimator
+from .model_log import model_logger
 
 logger = logging.getLogger(__name__)
 
@@ -256,6 +257,19 @@ def _decode_data_url(url: str) -> str:
         return f.name
 
 
+def _log_prompt_stats(model_id: str, chunk: object | None) -> None:
+    """Prompt size and speed plus peak memory, from mlx's final generation chunk."""
+    prompt_tokens = getattr(chunk, "prompt_tokens", None)
+    if prompt_tokens is None:
+        return
+    model_logger(model_id).info(
+        "Prompt %d tokens at %.0f tok/s, peak memory %.1f GB",
+        prompt_tokens,
+        getattr(chunk, "prompt_tps", 0.0) or 0.0,
+        getattr(chunk, "peak_memory", 0.0) or 0.0,
+    )
+
+
 class Engine:
     """Holds loaded model runners in unified memory. One resident model by default."""
 
@@ -286,23 +300,30 @@ class Engine:
                 est_ram_bytes=breakdown["est_ram_bytes"] if breakdown else None,
                 tone=next_tone([r.tone for r in self._runners.values()]),
             )
-            if MLX_AVAILABLE:
-                if is_vision_model(local_path):
-                    if not MLX_VLM_AVAILABLE:
-                        raise RuntimeError(
-                            "This is a vision model, but mlx-vlm is not installed."
-                        )
-                    runner.is_vision = True
-                    runner.model, runner.processor = self._mlx_thread.submit(
-                        vlm_load, local_path
-                    ).result()
-                    runner.config = vlm_load_config(local_path)
-                else:
-                    runner.model, runner.tokenizer = self._mlx_thread.submit(
-                        load, local_path
-                    ).result()
+            log = model_logger(model_id)
+            estimate = f"{runner.est_ram_bytes / 1e9:.1f} GB" if runner.est_ram_bytes else "unknown"
+            log.info("Loading with %d-token context, estimated memory %s", context_length, estimate)
+            started = time.monotonic()
+            try:
+                self._load_weights(runner)
+            except Exception:
+                log.exception("Load failed after %.1f s", time.monotonic() - started)
+                raise
+            log.info("Loaded in %.1f s", time.monotonic() - started)
             self._runners[model_id] = runner
             return runner
+
+    def _load_weights(self, runner: Runner) -> None:
+        if not MLX_AVAILABLE:
+            return
+        if is_vision_model(runner.local_path):
+            if not MLX_VLM_AVAILABLE:
+                raise RuntimeError("This is a vision model, but mlx-vlm is not installed.")
+            runner.is_vision = True
+            runner.model, runner.processor = self._mlx_thread.submit(vlm_load, runner.local_path).result()
+            runner.config = vlm_load_config(runner.local_path)
+        else:
+            runner.model, runner.tokenizer = self._mlx_thread.submit(load, runner.local_path).result()
 
     def unload_model(self, model_id: str) -> bool:
         with self._lock:
@@ -313,6 +334,7 @@ class Engine:
         runner.tokenizer = None
         runner.processor = None
         runner.config = None
+        model_logger(model_id).info("Unloaded")
         return True
 
     def is_loaded(self, model_id: str) -> bool:
@@ -404,10 +426,13 @@ class Engine:
                             max_tokens=max_tokens,
                             sampler=sampler,
                         )
+                    last = None
                     for chunk in chunks:
                         if stop.is_set():
                             break
+                        last = chunk
                         tokens.put(getattr(chunk, "text", str(chunk)))
+                    _log_prompt_stats(model_id, last)
                 except Exception as exc:  # noqa: BLE001 - surfaced to the consumer
                     tokens.put(exc)
                 finally:

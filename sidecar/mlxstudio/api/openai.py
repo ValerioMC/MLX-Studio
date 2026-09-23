@@ -16,6 +16,7 @@ from ..db.session import SessionLocal
 from ..schemas import ChatCompletionRequest
 from ..security import require_api_key
 from ..services.engine import ParsedToolCall, engine
+from ..services.model_log import model_logger
 
 router = APIRouter(prefix="/v1", tags=["openai"], dependencies=[Depends(require_api_key)])
 settings = get_settings()
@@ -95,6 +96,18 @@ def generation_usage(generated: int, started_at: float, first_token_at: float | 
     }
 
 
+def log_generation(model_id: str, usage: dict, reason: str) -> None:
+    """One line per reply: size, speed and why it ended. Never its text."""
+    ttft = usage.get("time_to_first_token")
+    model_logger(model_id).info(
+        "Generated %d tokens at %.1f tok/s, first token in %s, finished: %s",
+        usage["completion_tokens"],
+        usage["tok_per_sec"],
+        f"{ttft:.2f} s" if ttft is not None else "n/a",
+        reason,
+    )
+
+
 def _wire_tool_call(call: ParsedToolCall, index: int | None = None) -> dict:
     wire = {
         "id": call.id,
@@ -158,6 +171,7 @@ def chat_completions(req: ChatCompletionRequest):
                         delta = {"content": event}
                     yield chunk_payload(delta)
             except Exception as exc:  # surface generation errors to the client
+                model_logger(req.model).error("Generation failed: %s", exc)
                 err = {
                     "id": cid,
                     "object": "chat.completion.chunk",
@@ -174,6 +188,9 @@ def chat_completions(req: ChatCompletionRequest):
                 yield f"data: {json.dumps(err)}\n\n"
                 yield "data: [DONE]\n\n"
                 return
+            usage = generation_usage(n, started_at, first_token_at, time.time())
+            reason = finish_reason(tool_call_count, n, req.max_tokens)
+            log_generation(req.model, usage, reason)
             done = {
                 "id": cid,
                 "object": "chat.completion.chunk",
@@ -183,10 +200,10 @@ def chat_completions(req: ChatCompletionRequest):
                     {
                         "index": 0,
                         "delta": {},
-                        "finish_reason": finish_reason(tool_call_count, n, req.max_tokens),
+                        "finish_reason": reason,
                     }
                 ],
-                "usage": generation_usage(n, started_at, first_token_at, time.time()),
+                "usage": usage,
             }
             yield f"data: {json.dumps(done)}\n\n"
             yield "data: [DONE]\n\n"
@@ -197,6 +214,8 @@ def chat_completions(req: ChatCompletionRequest):
     text_parts: list[str] = []
     tool_calls: list[dict] = []
     generated = 0
+    started_at = time.time()
+    first_token_at: float | None = None
     try:
         for event in engine.stream_chat(
             req.model,
@@ -207,12 +226,17 @@ def chat_completions(req: ChatCompletionRequest):
             tools=tools,
         ):
             generated += 1
+            if first_token_at is None:
+                first_token_at = time.time()
             if isinstance(event, ParsedToolCall):
                 tool_calls.append(_wire_tool_call(event))
             else:
                 text_parts.append(event)
     except RuntimeError as exc:
+        model_logger(req.model).error("Generation failed: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    reason = finish_reason(len(tool_calls), generated, req.max_tokens)
+    log_generation(req.model, generation_usage(generated, started_at, first_token_at, time.time()), reason)
     text = "".join(text_parts)
     message: dict = {"role": "assistant", "content": text or (None if tool_calls else "")}
     if tool_calls:
@@ -226,7 +250,7 @@ def chat_completions(req: ChatCompletionRequest):
             {
                 "index": 0,
                 "message": message,
-                "finish_reason": finish_reason(len(tool_calls), generated, req.max_tokens),
+                "finish_reason": reason,
             }
         ],
     }

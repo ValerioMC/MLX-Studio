@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Code2, MessageSquare, Play, RefreshCw, Square, Trash2 } from "lucide-react";
+import { Code2, MessageSquare, Play, RefreshCw, ScrollText, Square, Trash2 } from "lucide-react";
 import { useModels } from "@/lib/api/queries";
 import { jobForRepo, useLive } from "@/stores/live";
 import { useChat } from "@/stores/chat";
 import { StartModelDialog } from "@/components/models/StartModelDialog";
 import { ConnectDialog } from "@/components/models/ConnectDialog";
+import { ModelLogsDialog } from "@/components/models/ModelLogsDialog";
 import { ModelFacts } from "@/components/models/ModelFacts";
 import { useModelAction } from "@/components/models/useModelActions";
 import { ConfirmDialog } from "@/components/ui/Dialog";
@@ -29,6 +30,7 @@ export function ModelsView() {
   const [startTarget, setStartTarget] = useState<Model | null>(null);
   const [connectTarget, setConnectTarget] = useState<Model | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Model | null>(null);
+  const [logsTarget, setLogsTarget] = useState<Model | null>(null);
 
   const sorted = [...(models ?? [])].sort(byStatusThenName);
   const totalOnDisk = sorted.reduce((sum, m) => sum + (m.download_bytes ?? 0), 0);
@@ -125,6 +127,15 @@ export function ModelsView() {
                   <Button
                     variant="ghost"
                     size="icon"
+                    title="Logs"
+                    aria-label={`${m.display_name} logs`}
+                    onClick={() => setLogsTarget(m)}
+                  >
+                    <ScrollText />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     title={updating ? "Updating" : "Check for updates"}
                     aria-label={`Check ${m.display_name} for updates`}
                     disabled={Boolean(updating)}
@@ -163,6 +174,7 @@ export function ModelsView() {
         />
       )}
       {connectTarget && <ConnectDialog model={connectTarget} onClose={() => setConnectTarget(null)} />}
+      {logsTarget && <ModelLogsDialog model={logsTarget} onClose={() => setLogsTarget(null)} />}
       {deleteTarget && (
         <ConfirmDialog
           title={`Delete ${deleteTarget.display_name}?`}

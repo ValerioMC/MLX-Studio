@@ -14,7 +14,7 @@ from ..db.models import Activity, Model
 from ..db.session import get_db
 from ..schemas import ModelOut, StartModelRequest
 from ..security import require_internal_token
-from ..services import estimator, hf_catalog, metrics
+from ..services import estimator, hf_catalog, metrics, model_log
 from ..services.engine import engine
 
 logger = logging.getLogger(__name__)
@@ -173,10 +173,5 @@ def update_model(model_id: str, db: Session = Depends(get_db)):
 
 @router.get("/{model_id}/logs")
 def logs(model_id: str, tail: int = 200):
-    from ..config import get_settings
-
-    log_file = get_settings().logs_path / f"{model_id}.log"
-    if not log_file.exists():
-        return {"lines": []}
-    lines = log_file.read_text(errors="ignore").splitlines()[-tail:]
-    return {"lines": lines}
+    """The last lines of the model's diagnostic log (see services/model_log.py)."""
+    return {"lines": model_log.tail(model_id, max(1, min(tail, 2000)))}
