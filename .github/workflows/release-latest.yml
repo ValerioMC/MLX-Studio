@@ -13,8 +13,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The same lint, typecheck and tests that gate pull requests; a failure here
+  # stops the build, so nothing is published.
+  checks:
+    uses: ./.github/workflows/ci.yml
+
   build:
     name: Build apple-silicon
+    needs: checks
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4

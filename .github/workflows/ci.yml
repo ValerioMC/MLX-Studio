@@ -1,0 +1,52 @@
+name: CI
+
+# Lint, typecheck and tests for the frontend and the sidecar. Runs on pull
+# requests to main, and is called by release-latest.yml so that nothing is
+# built or published from a main commit that fails it.
+on:
+  pull_request:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Lint, typecheck and tests
+    # Apple Silicon, so the sidecar's mlx extra installs and its tests run as shipped.
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: sidecar/uv.lock
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint frontend
+        run: pnpm lint
+
+      - name: Typecheck frontend
+        run: pnpm typecheck
+
+      - name: Test frontend
+        run: pnpm test
+
+      - name: Test sidecar
+        run: uv --directory sidecar run --extra dev --extra mlx pytest tests -q
+
+      - name: Lint sidecar
+        run: uv --directory sidecar run --extra dev ruff check mlxstudio tests

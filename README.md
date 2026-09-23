@@ -89,9 +89,13 @@ MLX (the engine falls back to its stub).
 
 ### CI releases
 
-Every push to `main` runs [`release-latest.yml`](./.github/workflows/release-latest.yml):
-it builds the app on `macos-14` (Apple Silicon), then recreates the GitHub
-release tagged `latest` with the DMG (`MLX-Studio_apple-silicon.dmg`). The
+Every push to `main` runs [`release-latest.yml`](./.github/workflows/release-latest.yml).
+It first runs the checks in [`ci.yml`](./.github/workflows/ci.yml): frontend lint,
+typecheck and vitest, then sidecar pytest and ruff. If any fails, nothing is built
+or published. When they pass, it builds the app on `macos-14` (Apple Silicon) and
+recreates the GitHub release tagged `latest` with the DMG
+(`MLX-Studio_apple-silicon.dmg`). Pull requests to `main` run the same checks
+without releasing. The
 workflow can also be triggered manually from the Actions tab. Current version: **0.4.0** (kept in
 sync across `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`,
 `sidecar/pyproject.toml`, and `sidecar/mlxstudio/__init__.py`).
