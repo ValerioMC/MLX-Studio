@@ -24,7 +24,7 @@
  * arc — and only then: a dial with nothing happening is perfectly still.
  */
 import { computed, onMounted, ref } from "vue";
-import { memoryCells, type MemoryLedger, type MemorySegment } from "@/lib/memory";
+import { HEADLINE_READOUT_KEY, memoryCells, readoutKey, type MemoryLedger, type MemorySegment } from "@/lib/memory";
 import { bytes, gigabytes } from "@/lib/format";
 
 const props = withDefaults(
@@ -259,14 +259,14 @@ function point(angleDeg: number, radius: number): { x: number; y: number } {
     <!-- Center readout. -->
     <div class="pointer-events-none absolute inset-0 grid place-items-center">
       <Transition name="crossfade" mode="out-in">
-        <div v-if="focus" :key="focus.key" class="flex max-w-[60%] flex-col items-center text-center">
+        <div v-if="focus" :key="readoutKey(focus)" class="flex max-w-[60%] flex-col items-center text-center">
           <span class="line-clamp-2 text-sm font-medium text-muted">{{ focus.label }}</span>
           <span class="tabular pt-0.5 text-3xl font-semibold">{{ bytes(focus.bytes) }}</span>
           <span class="tabular text-xs text-subtle">
             {{ Math.round((focus.bytes / (ledger.totalBytes || 1)) * 100) }}% of memory
           </span>
         </div>
-        <div v-else key="free" class="flex flex-col items-center">
+        <div v-else :key="HEADLINE_READOUT_KEY" class="flex flex-col items-center">
           <span class="tabular font-semibold leading-none tracking-[-0.05em]" :style="{ fontSize: `${size * 0.22}px` }">
             {{ gigabytes(ledger.freeForModelsBytes) }}
           </span>

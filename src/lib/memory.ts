@@ -47,6 +47,19 @@ export function nextTone(used: readonly number[]): number {
   return counts.indexOf(Math.min(...counts));
 }
 
+/** Key of the dial's default readout, "GB free for models". */
+export const HEADLINE_READOUT_KEY = "headline";
+
+/**
+ * The key the dial's centre readout renders under: the headline when nothing is pointed at,
+ * otherwise the pointed-at segment. Segment keys are namespaced so none can equal the headline's:
+ * the Free segment's key is "free", and two branches sharing a key are patched in place by Vue
+ * instead of swapped, which leaves one branch's classes on the other's content.
+ */
+export function readoutKey(segment: Pick<MemorySegment, "key"> | null): string {
+  return segment ? `segment:${segment.key}` : HEADLINE_READOUT_KEY;
+}
+
 export function memoryLedger(
   stats: SystemStats,
   nameOf: (modelId: string) => string,

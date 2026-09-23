@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { memoryCells, memoryLedger, nextTone } from "./memory";
+import { HEADLINE_READOUT_KEY, memoryCells, memoryLedger, nextTone, readoutKey } from "./memory";
 import type { SystemStats } from "@/types";
 
 const GB = 1024 ** 3;
@@ -125,5 +125,24 @@ describe("memoryCells", () => {
     const overflow = cells.filter((c) => c.kind === "overflow");
     expect(overflow).toHaveLength(16);
     expect(cells.slice(0, 64).some((c) => c.kind === "pending")).toBe(true);
+  });
+});
+
+describe("readoutKey", () => {
+  it("renders the headline under its own key when nothing is pointed at", () => {
+    expect(readoutKey(null)).toBe(HEADLINE_READOUT_KEY);
+  });
+
+  it("never gives a segment the headline's key, including the Free segment", () => {
+    const ledger = memoryLedger(
+      stats({ loaded_models: [{ model_id: "free", context_length: 4096, est_ram_bytes: 8 * GB, tone: 0 }] }),
+      name,
+    );
+
+    const keys = ledger.segments.map((segment) => readoutKey(segment));
+
+    expect(ledger.segments.map((s) => s.key)).toContain("free");
+    expect(keys).not.toContain(HEADLINE_READOUT_KEY);
+    expect(new Set(keys).size).toBe(keys.length);
   });
 });
