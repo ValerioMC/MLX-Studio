@@ -87,7 +87,8 @@ export function CatalogView() {
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [sort, setSort] = useState<CatalogSort>("downloads");
   const [filters, setFilters] = useState<Filters>({ quant: null, vision: false, instruct: false, fitsOnly: false });
-  const [limit, setLimit] = useState(PAGE_SIZE);
+  // Paging belongs to one question: a new search or filter starts from the first page.
+  const [page, setPage] = useState({ question: "", limit: PAGE_SIZE });
   const [detailTarget, setDetailTarget] = useState<CatalogModel | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -95,9 +96,6 @@ export function CatalogView() {
     const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
   }, [query]);
-
-  // A new question starts from the first page.
-  useEffect(() => setLimit(PAGE_SIZE), [debouncedQuery, sort, filters.quant, filters.vision, filters.instruct]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -110,6 +108,9 @@ export function CatalogView() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  const question = JSON.stringify([debouncedQuery, sort, filters.quant, filters.vision, filters.instruct]);
+  const limit = page.question === question ? page.limit : PAGE_SIZE;
 
   const { data, isFetching, isError, error, refetch, isPlaceholderData } = useQuery({
     queryKey: ["catalog", debouncedQuery, sort, filters.quant, filters.vision, filters.instruct, limit],
@@ -240,7 +241,7 @@ export function CatalogView() {
 
       {mayHaveMore && items.length > 0 && (
         <div className="flex justify-center pt-5">
-          <Button variant="secondary" loading={isFetching} onClick={() => setLimit((l) => l + PAGE_SIZE)}>
+          <Button variant="secondary" loading={isFetching} onClick={() => setPage({ question, limit: limit + PAGE_SIZE })}>
             Show more
           </Button>
         </div>

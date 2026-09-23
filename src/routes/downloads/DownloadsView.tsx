@@ -5,7 +5,7 @@ import { api } from "@/lib/api/client";
 import { bytes, eta, percent, speed } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useLive } from "@/stores/live";
-import { useStartDownload } from "@/routes/catalog/DownloadButton";
+import { useStartDownload } from "@/routes/catalog/useStartDownload";
 import { ConfirmDialog } from "@/components/ui/Dialog";
 import { Button, EmptyState, PageHeader, StatusDot } from "@/components/ui/primitives";
 import type { DownloadJob, DownloadStatus } from "@/types";

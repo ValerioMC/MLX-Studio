@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { type ReactNode, useEffect, useRef } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useRef } from "react";
 
 /** A panel anchored under its trigger; outside clicks and Escape close it. */
 export function Popover({
@@ -19,7 +19,9 @@ export function Popover({
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
-  closeRef.current = onClose;
+  useLayoutEffect(() => {
+    closeRef.current = onClose;
+  });
 
   useEffect(() => {
     if (!open) return;

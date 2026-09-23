@@ -91,3 +91,6 @@ Icon[[:cntrl:]]
 *.swp
 *.swo
 *~
+
+# pnpm is the package manager; npm lockfiles are never committed
+package-lock.json

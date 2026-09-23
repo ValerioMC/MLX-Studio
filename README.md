@@ -155,6 +155,7 @@ uv run --extra dev pytest tests      # sidecar unit + API tests
 cd ..
 pnpm test                            # frontend unit tests (vitest)
 pnpm typecheck                       # frontend typecheck
+pnpm lint                            # ESLint (flat config in eslint.config.js)
 ```
 
 ## License

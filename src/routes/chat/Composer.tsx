@@ -49,11 +49,6 @@ export function Composer({
     if (!disabled) textRef.current?.focus();
   }, [disabled]);
 
-  // Attachments only make sense for the model they were picked for.
-  useEffect(() => {
-    if (!canAttach) setAttachments([]);
-  }, [canAttach]);
-
   const addImages = async (files: Iterable<File>) => {
     const images = Array.from(files).filter((f) => f.type.startsWith("image/"));
     const urls = await Promise.all(images.map(readAsDataUrl));

@@ -1,21 +1,10 @@
-import { useMutation } from "@tanstack/react-query";
 import { Check, Download, RotateCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { api } from "@/lib/api/client";
 import { useModels } from "@/lib/api/queries";
 import { jobForRepo, useLive } from "@/stores/live";
 import { Button } from "@/components/ui/primitives";
 import { percent } from "@/lib/format";
-import type { DownloadJob } from "@/types";
-
-export function useStartDownload() {
-  return useMutation({
-    mutationFn: (repoId: string) =>
-      api<DownloadJob>("/downloads", { method: "POST", body: JSON.stringify({ repo_id: repoId }) }),
-    // Show the job at once; the progress feed takes over from here.
-    onSuccess: (job) => useLive.setState((s) => ({ downloads: { ...s.downloads, [job.id]: job } })),
-  });
-}
+import { useStartDownload } from "./useStartDownload";
 
 /** Download, or where the download of this repo stands. */
 export function DownloadButton({ repoId, quiet = false }: { repoId: string; quiet?: boolean }) {

@@ -170,8 +170,6 @@ export function ChatView() {
     if (atBottom) setShowJump(false);
   };
 
-  const onRegenerate = useCallback(() => regenerate(active), [active]);
-
   return (
     <div className="flex h-full min-h-0">
       <ConversationList />
@@ -215,7 +213,7 @@ export function ChatView() {
                   key={m.id}
                   message={m}
                   isLast={i === messages.length - 1}
-                  onRegenerate={i === messages.length - 1 && active ? onRegenerate : undefined}
+                  onRegenerate={i === messages.length - 1 && active ? () => regenerate(active) : undefined}
                   maxTokens={maxTokens}
                 />
               ))}
@@ -242,6 +240,8 @@ export function ChatView() {
               </p>
             )}
             <Composer
+              // Attachments only make sense for a vision model: a fresh composer drops them.
+              key={activeModel?.vision ? "vision" : "text"}
               disabled={!active}
               canAttach={!!activeModel?.vision}
               placeholder={

@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { X } from "lucide-react";
-import { type ReactNode, useEffect, useId, useRef } from "react";
+import { type ReactNode, useEffect, useId, useLayoutEffect, useRef } from "react";
 import { Button } from "./primitives";
 
 const FOCUSABLE =
@@ -31,10 +31,13 @@ export function Dialog({
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const descriptionId = useId();
+  // Latest props for the key handler, which is bound once for the dialog's life.
   const closeRef = useRef(onClose);
-  closeRef.current = onClose;
   const dismissibleRef = useRef(dismissible);
-  dismissibleRef.current = dismissible;
+  useLayoutEffect(() => {
+    closeRef.current = onClose;
+    dismissibleRef.current = dismissible;
+  });
 
   useEffect(() => {
     const opener = document.activeElement as HTMLElement | null;
