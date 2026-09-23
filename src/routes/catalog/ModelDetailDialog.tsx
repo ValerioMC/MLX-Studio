@@ -1,14 +1,28 @@
+import { lazy, Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink, Heart } from "lucide-react";
 import { api } from "@/lib/api/client";
 import { bytes, compactNumber } from "@/lib/format";
-import { Markdown } from "@/components/chat/Markdown";
 import { openExternal } from "@/lib/openExternal";
 import { ModelFacts } from "@/components/models/ModelFacts";
 import { Dialog } from "@/components/ui/Dialog";
 import { Tag } from "@/components/ui/primitives";
 import { DownloadButton } from "./DownloadButton";
 import type { CatalogModel } from "@/types";
+
+// The Markdown renderer and its highlighter load when a model card first opens,
+// not with the catalog.
+const Markdown = lazy(() => import("@/components/chat/Markdown").then((m) => ({ default: m.Markdown })));
+
+function CardSkeleton() {
+  return (
+    <div className="space-y-2" aria-busy>
+      {[88, 72, 94, 60].map((w) => (
+        <div key={w} className="h-3 animate-pulse rounded bg-muted" style={{ width: `${w}%` }} />
+      ))}
+    </div>
+  );
+}
 
 interface RepoDetail {
   hf_repo_id: string;
@@ -64,17 +78,13 @@ export function ModelDetailDialog({ model, onClose }: { model: CatalogModel; onC
       </div>
 
       <div className="selectable border-t pt-4">
-        {isLoading && (
-          <div className="space-y-2" aria-busy>
-            {[88, 72, 94, 60].map((w) => (
-              <div key={w} className="h-3 animate-pulse rounded bg-muted" style={{ width: `${w}%` }} />
-            ))}
-          </div>
-        )}
+        {isLoading && <CardSkeleton />}
         {isError && <p className="text-sm text-muted-foreground">Could not load the model card from Hugging Face.</p>}
         {data &&
           (data.readme ? (
-            <Markdown content={cardBody(data.readme)} />
+            <Suspense fallback={<CardSkeleton />}>
+              <Markdown content={cardBody(data.readme)} />
+            </Suspense>
           ) : (
             <p className="text-sm text-muted-foreground">This model has no model card.</p>
           ))}
