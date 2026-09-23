@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
-from sqlalchemy import create_engine, event, inspect, text
+from sqlalchemy import Engine, create_engine, event, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..config import get_settings
@@ -45,9 +45,25 @@ def _drop_legacy_conversation_tables() -> None:
         conn.execute(text("DROP TABLE IF EXISTS conversations"))
 
 
+def add_missing_columns(engine: Engine) -> None:
+    """Add columns introduced after a table was first created.
+
+    create_all only creates missing tables, never columns, so databases from
+    earlier versions are upgraded here in place, keeping their rows. Each
+    addition is idempotent."""
+    inspector = inspect(engine)
+    if "messages" not in inspector.get_table_names():
+        return
+    columns = {c["name"] for c in inspector.get_columns("messages")}
+    if "images" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE messages ADD COLUMN images JSON"))
+
+
 def init_db() -> None:
     _drop_legacy_conversation_tables()
     Base.metadata.create_all(_engine)
+    add_missing_columns(_engine)
 
 
 def get_db() -> Iterator[Session]:

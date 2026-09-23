@@ -7,9 +7,10 @@ import { messageId, useChat, type UIMsg } from "@/stores/chat";
 import { usePreferences } from "@/stores/preferences";
 import type { Conversation } from "@/types";
 
-interface StoredMessage {
+interface LoadedMessage {
   role: UIMsg["role"];
   content: string;
+  images?: string[] | null;
   tok_per_sec?: number | null;
 }
 
@@ -128,12 +129,13 @@ export function stopGenerating(): void {
 export async function openConversation(conversation: Conversation): Promise<void> {
   const chat = useChat.getState();
   if (chat.busy || conversation.id === chat.conversationId) return;
-  const res = await api<{ items: StoredMessage[] }>(`/conversations/${conversation.id}/messages`);
+  const res = await api<{ items: LoadedMessage[] }>(`/conversations/${conversation.id}/messages`);
   chat.setMessages(
     res.items.map((m) => ({
       id: messageId(),
       role: m.role,
       content: m.content,
+      images: m.images?.length ? m.images : undefined,
       tokPerSec: m.tok_per_sec ?? undefined,
     })),
   );

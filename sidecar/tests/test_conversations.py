@@ -83,3 +83,38 @@ def test_replace_messages_rewrites_thread_and_keeps_title(client):
 def test_replace_messages_unknown_conversation(client):
     response = client.put("/conversations/nope/messages", json={"messages": []}, headers=AUTH)
     assert response.status_code == 404
+
+
+PNG = "data:image/png;base64,iVBORw0KGgo="
+
+
+def test_images_round_trip_with_the_thread(client):
+    conv_id = client.post("/conversations", json={}, headers=AUTH).json()["id"]
+
+    saved = client.put(
+        f"/conversations/{conv_id}/messages",
+        json={
+            "messages": [
+                {"role": "user", "content": "What is this?", "images": [PNG]},
+                {"role": "assistant", "content": "A tiny PNG."},
+            ]
+        },
+        headers=AUTH,
+    )
+
+    assert saved.status_code == 200
+    items = client.get(f"/conversations/{conv_id}/messages", headers=AUTH).json()["items"]
+    assert items[0]["images"] == [PNG]
+    assert items[1]["images"] is None
+
+
+def test_images_must_be_image_urls(client):
+    conv_id = client.post("/conversations", json={}, headers=AUTH).json()["id"]
+
+    response = client.put(
+        f"/conversations/{conv_id}/messages",
+        json={"messages": [{"role": "user", "content": "x", "images": ["file:///etc/passwd"]}]},
+        headers=AUTH,
+    )
+
+    assert response.status_code == 422

@@ -52,8 +52,14 @@ describe("toStoredMessages", () => {
     ]);
 
     expect(stored).toEqual([
-      { role: "user", content: "Q", tok_per_sec: null },
-      { role: "assistant", content: "A", tok_per_sec: 40 },
+      { role: "user", content: "Q", images: null, tok_per_sec: null },
+      { role: "assistant", content: "A", images: null, tok_per_sec: 40 },
     ]);
+  });
+
+  it("keeps the images attached to a question", () => {
+    const [stored] = toStoredMessages([user("What is this?", ["data:image/png;base64,AA"])]);
+
+    expect(stored?.images).toEqual(["data:image/png;base64,AA"]);
   });
 });

@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     DateTime,
     Float,
@@ -77,6 +78,9 @@ class Message(Base):
     )
     role: Mapped[str] = mapped_column(String, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    # Images attached to a user message, as data: or http(s) URLs, so a reopened
+    # vision chat shows them and keeps sending them to the model.
+    images: Mapped[list[str] | None] = mapped_column(JSON)
     tok_per_sec: Mapped[float | None] = mapped_column(Float)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 

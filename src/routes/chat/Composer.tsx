@@ -2,19 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowUp, ImagePlus, Square, X } from "lucide-react";
 import { Button } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
+import { imageForModel } from "@/lib/image";
 import { useChat } from "@/stores/chat";
 
 const MAX_ATTACHMENTS = 4;
 const MAX_HEIGHT_PX = 220;
-
-function readAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error ?? new Error(`Could not read ${file.name}`));
-    reader.readAsDataURL(file);
-  });
-}
 
 export function Composer({
   disabled,
@@ -51,7 +43,7 @@ export function Composer({
 
   const addImages = async (files: Iterable<File>) => {
     const images = Array.from(files).filter((f) => f.type.startsWith("image/"));
-    const urls = await Promise.all(images.map(readAsDataUrl));
+    const urls = await Promise.all(images.map(imageForModel));
     setAttachments((prev) => [...prev, ...urls].slice(0, MAX_ATTACHMENTS));
   };
 

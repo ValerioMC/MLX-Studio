@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
@@ -28,10 +28,25 @@ class ConversationPatch(BaseModel):
     title: str
 
 
+IMAGE_URL_PREFIXES = ("data:image/", "http://", "https://")
+
+
 class MessageIn(BaseModel):
     role: str
     content: str
+    images: list[str] | None = None
     tok_per_sec: float | None = None
+
+    @field_validator("images")
+    @classmethod
+    def _images_are_urls(cls, images: list[str] | None) -> list[str] | None:
+        """Only what a vision model can be sent: data:image URLs or http(s) links."""
+        if images is None:
+            return None
+        bad = [url[:40] for url in images if not url.startswith(IMAGE_URL_PREFIXES)]
+        if bad:
+            raise ValueError(f"images must be data:image or http(s) URLs, got {bad}")
+        return images or None
 
 
 class MessagesIn(BaseModel):
@@ -68,7 +83,7 @@ def get_messages(conv_id: str, db: Session = Depends(get_db)):
         raise HTTPException(404, "Conversation not found")
     return {
         "items": [
-            {"role": m.role, "content": m.content, "tok_per_sec": m.tok_per_sec}
+            {"role": m.role, "content": m.content, "images": m.images, "tok_per_sec": m.tok_per_sec}
             for m in conv.messages
         ]
     }
@@ -85,6 +100,7 @@ def append_messages(conv_id: str, body: MessagesIn, db: Session = Depends(get_db
                 conversation_id=conv_id,
                 role=m.role,
                 content=m.content,
+                images=m.images,
                 tok_per_sec=m.tok_per_sec,
             )
         )
