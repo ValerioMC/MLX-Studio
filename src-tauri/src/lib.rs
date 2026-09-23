@@ -1,8 +1,9 @@
 mod sidecar;
+mod tray;
 
 use serde::Serialize;
 use std::sync::Mutex;
-use tauri::{Manager, RunEvent};
+use tauri::{Manager, RunEvent, WindowEvent};
 use tauri_plugin_shell::process::CommandChild;
 
 #[derive(Default, Serialize, Clone)]
@@ -39,7 +40,18 @@ pub fn run() {
             let (cfg, child) = sidecar::spawn(app.handle())?;
             *app.state::<AppState>().config.lock().unwrap() = cfg;
             *app.state::<AppState>().sidecar.lock().unwrap() = Some(child);
+            tray::install(app.handle())?;
             Ok(())
+        })
+        // Closing the window hides it: the app keeps serving the API and lives on
+        // in the menu bar, whose "Quit MLX Studio" (or ⌘Q) is the way out.
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![get_runtime_config])
         .build(tauri::generate_context!())
@@ -49,8 +61,12 @@ pub fn run() {
             // holds the fixed port hostage on the next launch. ExitRequested
             // fires when the last window closes, Exit on final teardown; the
             // cleanup is idempotent, so run it on both.
-            if matches!(event, RunEvent::ExitRequested { .. } | RunEvent::Exit) {
-                shutdown_sidecar(app_handle);
+            match event {
+                RunEvent::ExitRequested { .. } | RunEvent::Exit => shutdown_sidecar(app_handle),
+                // Clicking the Dock icon brings back the hidden window.
+                #[cfg(target_os = "macos")]
+                RunEvent::Reopen { has_visible_windows: false, .. } => tray::show_main_window(app_handle),
+                _ => {}
             }
         });
 }

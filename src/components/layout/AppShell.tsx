@@ -32,10 +32,37 @@ function useGlobalShortcuts(): void {
   }, [navigate]);
 }
 
+/** Event the menu-bar item sends to open Chat with a model (see src-tauri/src/tray.rs). */
+const TRAY_OPEN_CHAT_EVENT = "tray:open-chat";
+
+/** The menu-bar item's "Open chat": select that model and go to Chat. */
+function useTrayOpenChat(): void {
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return; // browser dev: there is no tray
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    void import("@tauri-apps/api/event").then(({ listen }) =>
+      listen<string>(TRAY_OPEN_CHAT_EVENT, ({ payload }) => {
+        useChat.getState().setModel(payload);
+        navigate("/chat");
+      }).then((stop) => {
+        if (disposed) stop();
+        else unlisten = stop;
+      }),
+    );
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [navigate]);
+}
+
 export function AppShell() {
   const { pathname } = useLocation();
   useEffect(() => startLiveFeeds(), []);
   useGlobalShortcuts();
+  useTrayOpenChat();
 
   // Chat owns its full height (thread + composer); other pages scroll.
   const fullBleed = pathname === "/chat";

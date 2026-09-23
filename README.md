@@ -137,6 +137,7 @@ Find the API key under **Settings ▸ Local API**.
 - **Chat**: streaming responses batched per frame, Markdown with highlighted, copyable code; collapsible reasoning ("Thought for 4 s") for Qwen3/DeepSeek-R1 style models; copy, regenerate, tokens/sec and time to first token per reply; notice when a reply hits the token limit; conversations grouped by date, renamable, persisted; system prompt, temperature and reply length remembered across launches; image attachments (picker, paste or drop) on vision models
 - **Vision models**: repos with a vision tower (Qwen-VL, LLaVA, ...) load through `mlx-vlm`; the `/v1` API accepts OpenAI-style `image_url` content parts (base64 data URLs or http URLs)
 - **Settings**: theme (system, light, dark, remembered), chat defaults, API base URL/key, optional Hugging Face token, models directory, how memory fit is decided
+- **Menu bar**: an icon in the macOS menu bar shows free memory for models and each running model, with *Open chat* and *Stop* per model, plus *Open MLX Studio* and *Quit MLX Studio*. Closing the window only hides it: the app keeps serving the API from the menu bar, and the Dock icon or *Open MLX Studio* brings the window back. Quit from the menu-bar item or with ⌘Q, which also stops the engine
 - **Keyboard**: ⌘1–⌘5 switch pages, ⌘, opens Settings, ⌘N starts a new chat, ⌘F searches the catalog, Esc closes dialogs
 - **OpenAI-compatible `/v1` API**: for `curl`, the OpenAI SDK, LangChain, Continue, Cursor, etc.; supports tool/function calling (agentic clients) on models with a parseable tool format
 

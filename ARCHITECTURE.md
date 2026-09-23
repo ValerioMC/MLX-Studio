@@ -425,7 +425,7 @@ Reserved for things only the native side can do; everything else goes over HTTP 
 ### 6.3 Native menus, tray, notifications, updates
 
 - **Menu bar:** standard macOS menus; `File ▸ New Chat (⌘N)`, `Edit`, `Models ▸ Start/Stop`, `View ▸ Toggle Sidebar (⌘\\)`, `Window`, `Help`. Menu actions emit events the React app handles via a global listener.
-- **Menu-bar extra (tray):** shows running models + RAM, quick stop, "Open MLX Studio". Lets the API keep serving with the window closed.
+- **Menu-bar extra (tray):** implemented in `src-tauri/src/tray.rs`. It shows free memory for models and each running model (with *Open chat* and *Stop*), plus *Open MLX Studio* and *Quit MLX Studio*. A background thread reads `/system/stats` and `/models` every 3 s with the per-launch token. It updates the free-memory line in place and rebuilds the menu only when the running models change, so an open menu is never swapped out under the pointer. *Open chat* emits `tray:open-chat` to the frontend. Closing the window hides it, so the API keeps serving with the window closed.
 - **Notifications:** "Download complete", "Model ready", "Out of memory — load canceled".
 - **Updater:** Tauri updater with signed artifacts; sidecar binary ships inside the bundle so app + engine version together.
 - **Permissions:** Tauri v2 capabilities scoped tightly — FS access limited to the models dir and app-support dir, shell limited to the one sidecar, network limited to the HF domains + localhost.
